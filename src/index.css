@@ -1,0 +1,122 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+
+  --color-canvas: #f5f7fb;
+  --color-surface: #f8f9fc;
+  --color-sidebar: #0b285c;
+  --color-primary: #185adb;
+  --color-primary-dark: #1148b4;
+  --color-ink: #172033;
+  --color-muted: #778199;
+  --color-muted-light: #a8afbf;
+  --color-border: #e7eaf0;
+  --color-blue-soft: #eaf1ff;
+  --color-green-soft: #e7f8ef;
+  --color-orange-soft: #fff3df;
+  --color-red-soft: #ffebee;
+  --color-purple-soft: #f0ebff;
+  --color-success: #1b9a61;
+  --color-success-bright: #46dc99;
+  --color-warning: #f2a12e;
+  --color-warning-dark: #b86d08;
+  --color-danger: #db4c5a;
+  --color-purple: #7357d8;
+  --color-hero: #1756cc;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    min-width: 20rem;
+    min-height: 100vh;
+    background: var(--color-canvas);
+  }
+
+  button,
+  input,
+  select {
+    font: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+}
+
+@media print {
+  body {
+    background: white !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .rab-print-sheet {
+    box-shadow: none !important;
+    border: none !important;
+  }
+}
+
+@layer components {
+  .card {
+    border: 1px solid var(--color-border);
+    border-radius: 1.25rem;
+    background: white;
+    box-shadow: 0 0.45rem 1.6rem rgb(39 52 82 / 0.055);
+  }
+
+  .bg-hero {
+    position: relative;
+    background:
+      linear-gradient(120deg, rgb(9 51 128 / 0.18), transparent 55%),
+      var(--color-hero);
+  }
+
+  .hero-orb {
+    position: absolute;
+    border-radius: 9999px;
+    border: 1px solid rgb(255 255 255 / 0.1);
+    background: rgb(255 255 255 / 0.045);
+  }
+
+  .hero-orb-one {
+    width: 14rem;
+    height: 14rem;
+    right: 7%;
+    top: -7rem;
+  }
+
+  .hero-orb-two {
+    width: 9rem;
+    height: 9rem;
+    right: 25%;
+    bottom: -7rem;
+  }
+
+  .disaster-ring {
+    background: conic-gradient(
+      var(--color-primary) 0 38%,
+      var(--color-warning) 38% 64%,
+      var(--color-purple) 64% 82%,
+      var(--color-success) 82% 100%
+    );
+  }
+}
+
+::-webkit-scrollbar {
+  width: 0.4rem;
+  height: 0.4rem;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: #cad0dc;
+}
