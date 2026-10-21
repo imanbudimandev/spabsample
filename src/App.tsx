@@ -6143,7 +6143,7 @@ function PksDocument({
         <img
           alt="Logo Kementerian Pendidikan Dasar dan Menengah"
           className="mx-auto h-14 w-auto max-w-full object-contain sm:h-16"
-          src="/logo-kemendikdasmen.png"
+          src={`${import.meta.env.BASE_URL}logo-kemendikdasmen.png`}
         />
       ) : null}
       <div className={`${showKop ? "mt-3" : ""} py-2 text-center`}>
