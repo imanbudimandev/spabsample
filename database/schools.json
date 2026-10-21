@@ -1,0 +1,101 @@
+[
+  {
+    "npsn": "20999999",
+    "name": "SMP Uji JSON DB",
+    "jenjang": "SMP",
+    "regency": "Kab. Cianjur",
+    "province": "Jawa Barat",
+    "principal": "Uji Kepala, S.Pd.",
+    "status": "Aktif"
+  },
+  {
+    "npsn": "20204182",
+    "name": "SMP Negeri 1 Sukamaju",
+    "jenjang": "SMP",
+    "province": "Jawa Barat",
+    "regency": "Kab. Cianjur",
+    "principal": "Hendra Gunawan, S.Pd.",
+    "status": "Aktif"
+  },
+  {
+    "npsn": "20203119",
+    "name": "SMP Negeri 1 Cianjur",
+    "jenjang": "SMP",
+    "province": "Jawa Barat",
+    "regency": "Kab. Cianjur",
+    "principal": "Dedi Kurniawan, S.Pd.",
+    "status": "Aktif"
+  },
+  {
+    "npsn": "20211845",
+    "name": "SMP Negeri 3 Garut",
+    "jenjang": "SMP",
+    "province": "Jawa Barat",
+    "regency": "Kab. Garut",
+    "principal": "Rina Marlina, M.Pd.",
+    "status": "Aktif"
+  },
+  {
+    "npsn": "20319374",
+    "name": "SMP Negeri 4 Demak",
+    "jenjang": "SMP",
+    "province": "Jawa Tengah",
+    "regency": "Kab. Demak",
+    "principal": "Sri Wahyuni, M.Pd.",
+    "status": "Aktif"
+  },
+  {
+    "npsn": "20520914",
+    "name": "SMP Negeri 2 Sumberwuluh",
+    "jenjang": "SMP",
+    "province": "Jawa Timur",
+    "regency": "Kab. Lumajang",
+    "principal": "Ahmad Fauzi, S.Pd.",
+    "status": "Aktif"
+  },
+  {
+    "npsn": "50200317",
+    "name": "SMP Negeri 1 Tanjung",
+    "jenjang": "SMP",
+    "province": "Nusa Tenggara Barat",
+    "regency": "Kab. Lombok Utara",
+    "principal": "Muhammad Ridwan, M.Pd.",
+    "status": "Aktif"
+  },
+  {
+    "npsn": "40201288",
+    "name": "SMP Negeri 2 Palu",
+    "jenjang": "SMP",
+    "province": "Sulawesi Tengah",
+    "regency": "Kota Palu",
+    "principal": "Andi Rahman, S.Pd.",
+    "status": "Aktif"
+  },
+  {
+    "npsn": "10307821",
+    "name": "SMP Negeri 5 Padang",
+    "jenjang": "SMP",
+    "province": "Sumatera Barat",
+    "regency": "Kota Padang",
+    "principal": "Fitriani, M.Pd.",
+    "status": "Aktif"
+  },
+  {
+    "npsn": "20205501",
+    "name": "SMP Negeri 2 Cianjur",
+    "jenjang": "SMP",
+    "province": "Jawa Barat",
+    "regency": "Kab. Cianjur",
+    "principal": "Siti Nurhaliza, M.Pd.",
+    "status": "Aktif"
+  },
+  {
+    "npsn": "20320112",
+    "name": "SMP Negeri 1 Demak",
+    "jenjang": "SMP",
+    "province": "Jawa Tengah",
+    "regency": "Kab. Demak",
+    "principal": "Bambang Sutrisno, S.Pd.",
+    "status": "Nonaktif"
+  }
+]

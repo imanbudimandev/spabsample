@@ -50,6 +50,16 @@
   }
 }
 
+.pmk-sheet {
+  box-sizing: border-box;
+  width: min(210mm, 100%);
+  min-height: 273mm;
+  background: white;
+  color: black;
+  padding: 12mm 14mm;
+  font-family: "Times New Roman", Times, serif;
+}
+
 @media print {
   body {
     background: white !important;
@@ -59,9 +69,37 @@
     display: none !important;
   }
 
-  .rab-print-sheet {
+  .rab-print-sheet,
+  .pmk-sheet {
     box-shadow: none !important;
     border: none !important;
+  }
+
+  body.pmk-print aside,
+  body.pmk-print header,
+  body.pmk-print .no-print {
+    display: none !important;
+  }
+
+  body.pmk-print .min-h-screen {
+    min-height: 0 !important;
+    padding-left: 0 !important;
+  }
+
+  body.pmk-print .pmk-sheet {
+    width: 210mm;
+    height: 273mm;
+    min-height: 273mm;
+    max-height: 273mm;
+    margin: 0 auto;
+    overflow: hidden;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  body.pmk-print .pmk-sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
   }
 }
 

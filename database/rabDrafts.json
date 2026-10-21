@@ -1,0 +1,81 @@
+{
+  "SMP Negeri 1 Sukamaju::Schoolkit": {
+    "items": [
+      {
+        "id": 1,
+        "name": "Tas sekolah",
+        "specification": "Bahan tahan air, ukuran siswa SMP",
+        "quantity": 1,
+        "unit": "Buah",
+        "price": 185000
+      },
+      {
+        "id": 2,
+        "name": "Paket alat tulis",
+        "specification": "Buku tulis, pensil, pulpen, penghapus, dan penggaris",
+        "quantity": 1,
+        "unit": "Paket",
+        "price": 125000
+      },
+      {
+        "id": 3,
+        "name": "Seragam sekolah",
+        "specification": "Satu set seragam SMP sesuai ukuran siswa",
+        "quantity": 100,
+        "unit": "Set",
+        "price": 275000
+      }
+    ],
+    "updatedAt": "13/10/2026, 15.52.00"
+  },
+  "SMP Negeri 1 Sukamaju::Meubeler": {
+    "items": [
+      {
+        "id": 1,
+        "name": "Meja siswa",
+        "specification": "Kayu kuat, ukuran standar SMP",
+        "quantity": 40,
+        "unit": "Unit",
+        "price": 650000
+      },
+      {
+        "id": 2,
+        "name": "Kursi siswa",
+        "specification": "Rangka besi, dudukan kayu",
+        "quantity": 40,
+        "unit": "Unit",
+        "price": 425000
+      },
+      {
+        "id": 3,
+        "name": "Lemari kelas",
+        "specification": "Lemari kayu 2 pintu untuk ruang kelas",
+        "quantity": 6,
+        "unit": "Unit",
+        "price": 2750000
+      }
+    ],
+    "updatedAt": "13/10/2026, 09.26.59"
+  },
+  "SMP Negeri 1 Sukamaju::Lab Komputer": {
+    "items": [
+      {
+        "id": 1,
+        "name": "Komputer siswa",
+        "specification": "PC desktop, RAM 8 GB, SSD 256 GB",
+        "quantity": 7,
+        "unit": "Unit",
+        "price": 7800000
+      },
+      {
+        "id": 2,
+        "name": "Meja dan kursi lab",
+        "specification": "Meja komputer siswa SMP beserta kursi",
+        "quantity": 1,
+        "unit": "Set",
+        "price": 1250000
+      }
+    ],
+    "updatedAt": "13/10/2026, 15.52.21"
+  }
+}

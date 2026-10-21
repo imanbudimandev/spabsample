@@ -3,7 +3,8 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
 
-import siteConfiguration from './.figma/make/site.json' with { type: 'json' }
+import siteConfiguration from './.figma/make/site.json'
+import { jsonDbPlugin } from './json-db-plugin'
 
 
 
@@ -13,13 +14,13 @@ export default defineConfig(({ mode }) => {
   const emitSourcemaps = mode === 'development'
 
   return {
-    base: process.env.FIGMA_PUBLIC_URL ? `${process.env.FIGMA_PUBLIC_URL}/` : './',
+    base: process.env.FIGMA_PUBLIC_URL ? `${process.env.FIGMA_PUBLIC_URL}/` : '/',
     build: {
-      outDir: 'build',
       sourcemap: emitSourcemaps ? 'inline' : false,
       minify: !emitSourcemaps,
     },
     plugins: [
+      jsonDbPlugin(path.resolve(__dirname)),
 react(),
       tailwindcss(),
       figmaSiteConfiguration(siteConfiguration),
@@ -29,7 +30,7 @@ react(),
     ],
     resolve: {
       alias: {
-        '@': path.resolve(import.meta.dirname, './src'),
+        '@': path.resolve(__dirname, './src'),
       },
     },
     server: {
@@ -39,6 +40,7 @@ react(),
       watch: {
         ignored: [
           '**/.figma/**',
+          '**/database/**',
 ],
       },
     },

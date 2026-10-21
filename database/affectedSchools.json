@@ -1,0 +1,174 @@
+[
+  {
+    "name": "SMP Negeri 1 Sukamaju",
+    "province": "Jawa Barat",
+    "regency": "Kab. Cianjur",
+    "location": "Kab. Cianjur, Jawa Barat",
+    "disaster": "Gempa Bumi",
+    "date": "18 Mei 2025",
+    "level": "Rusak Berat",
+    "students": 412,
+    "menuCount": 2,
+    "packages": [
+      "Schoolkit",
+      "Lab Komputer"
+    ],
+    "documents": {
+      "RAB": true,
+      "Pakta Integritas": true,
+      "Kwitansi": true,
+      "PKS": true
+    },
+    "schoolkitKategori": "uang"
+  },
+  {
+    "name": "SMP Negeri 4 Demak",
+    "province": "Jawa Tengah",
+    "regency": "Kab. Demak",
+    "location": "Kab. Demak, Jawa Tengah",
+    "disaster": "Banjir",
+    "date": "16 Mei 2025",
+    "level": "Rusak Sedang",
+    "students": 482,
+    "menuCount": 2,
+    "packages": [
+      "Schoolkit",
+      "Alat IPA"
+    ],
+    "schoolkitKategori": "barang",
+    "documents": {
+      "RAB": true,
+      "Pakta Integritas": true,
+      "Kwitansi": false,
+      "PKS": true
+    }
+  },
+  {
+    "name": "SMP Negeri 2 Sumberwuluh",
+    "province": "Jawa Timur",
+    "regency": "Kab. Lumajang",
+    "location": "Kab. Lumajang, Jawa Timur",
+    "disaster": "Erupsi",
+    "date": "14 Mei 2025",
+    "level": "Rusak Berat",
+    "students": 318,
+    "menuCount": 2,
+    "packages": [
+      "Lab Komputer",
+      "Meubeler"
+    ],
+    "documents": {
+      "RAB": true,
+      "Pakta Integritas": false,
+      "Kwitansi": false,
+      "PKS": false
+    }
+  },
+  {
+    "name": "SMP Negeri 1 Tanjung",
+    "province": "Nusa Tenggara Barat",
+    "regency": "Kab. Lombok Utara",
+    "location": "Kab. Lombok Utara, NTB",
+    "disaster": "Tanah Longsor",
+    "date": "12 Mei 2025",
+    "level": "Rusak Ringan",
+    "students": 365,
+    "menuCount": 1,
+    "packages": [
+      "Schoolkit"
+    ],
+    "documents": {
+      "RAB": false,
+      "Pakta Integritas": false,
+      "Kwitansi": false,
+      "PKS": false
+    },
+    "schoolkitKategori": "barang"
+  },
+  {
+    "name": "SMP Negeri 3 Garut",
+    "province": "Jawa Barat",
+    "regency": "Kab. Garut",
+    "location": "Kab. Garut, Jawa Barat",
+    "disaster": "Gempa Bumi",
+    "date": "11 Mei 2025",
+    "level": "Rusak Sedang",
+    "students": 528,
+    "menuCount": 3,
+    "packages": [
+      "Alat IPA",
+      "RKD",
+      "Lab Komputer"
+    ],
+    "documents": {
+      "RAB": true,
+      "Pakta Integritas": true,
+      "Kwitansi": false,
+      "PKS": true
+    }
+  },
+  {
+    "name": "SMP Negeri 2 Palu",
+    "province": "Sulawesi Tengah",
+    "regency": "Kota Palu",
+    "location": "Kota Palu, Sulawesi Tengah",
+    "disaster": "Gempa Bumi",
+    "date": "9 Mei 2025",
+    "level": "Rusak Berat",
+    "students": 441,
+    "menuCount": 3,
+    "packages": [
+      "Schoolkit",
+      "RKD",
+      "Meubeler"
+    ],
+    "documents": {
+      "RAB": true,
+      "Pakta Integritas": true,
+      "Kwitansi": true,
+      "PKS": true
+    }
+  },
+  {
+    "name": "SMP Negeri 5 Padang",
+    "province": "Sumatera Barat",
+    "regency": "Kota Padang",
+    "location": "Kota Padang, Sumatera Barat",
+    "disaster": "Banjir",
+    "date": "8 Mei 2025",
+    "level": "Rusak Sedang",
+    "students": 396,
+    "menuCount": 2,
+    "packages": [
+      "Alat IPA",
+      "Lab Komputer"
+    ],
+    "documents": {
+      "RAB": true,
+      "Pakta Integritas": false,
+      "Kwitansi": true,
+      "PKS": false
+    }
+  },
+  {
+    "name": "SMP Negeri 1 Cianjur",
+    "province": "Jawa Barat",
+    "regency": "Kab. Cianjur",
+    "location": "Kab. Cianjur, Jawa Barat",
+    "disaster": "Gempa Bumi",
+    "date": "7 Mei 2025",
+    "level": "Rusak Ringan",
+    "students": 454,
+    "menuCount": 2,
+    "packages": [
+      "Schoolkit",
+      "Meubeler"
+    ],
+    "documents": {
+      "RAB": true,
+      "Pakta Integritas": true,
+      "Kwitansi": false,
+      "PKS": false
+    }
+  }
+]

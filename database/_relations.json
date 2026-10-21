@@ -1,0 +1,21 @@
+{
+  "description": "Relasi antar koleksi JSON SPAB. Kunci asing memakai nama sekolah atau NPSN.",
+  "collections": {
+    "regions": "Master wilayah. Parent merujuk regions.name.",
+    "disasters": "Master jenis bencana. affectedSchools.disaster merujuk disasters.name.",
+    "goods": "Master barang. goods.category merujuk menus (nama paket bantuan).",
+    "menus": "Master menu bantuan dan daftar barang. Dipakai penetapan bantuan dan RAB.",
+    "schools": "Master sekolah. Kunci utama npsn.",
+    "affectedSchools": "Sekolah terdampak. Relasi name/npsn ke schools, disaster ke disasters, packages[] ke menus.",
+    "pksSchools": "Data PKS per sekolah. Relasi name ke affectedSchools.name dan npsn ke schools.npsn.",
+    "signers": "Penandatangan. schoolName kosong = pejabat pusat; terisi = relasi ke affectedSchools.name.",
+    "paktaTemplates": "Template pernyataan pakta. paktaDrafts.templateId merujuk id.",
+    "sptjmTemplates": "Template pernyataan SPTJM. sptjmDrafts.templateId merujuk id.",
+    "rabDrafts": "Draf RAB. Kunci schoolName::menu. Relasi ke affectedSchools dan menus.",
+    "kwitansiDrafts": "Draf kwitansi. Kunci schoolName::kind. Relasi ke affectedSchools.",
+    "paktaDrafts": "Draf pakta per sekolah. Relasi ke affectedSchools dan paktaTemplates.",
+    "sptjmDrafts": "Draf SPTJM per sekolah. Relasi ke affectedSchools dan sptjmTemplates.",
+    "pksDrafts": "Draf PKS (opsi kop) per sekolah. Relasi ke affectedSchools.",
+    "docUploads": "Unggahan dokumen per sekolah (RAB, pakta, kwitansi, SPTJM, PKS, pelaporan). Relasi ke affectedSchools.name."
+  }
+}

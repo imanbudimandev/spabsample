@@ -1,0 +1,104 @@
+[
+  {
+    "code": "32",
+    "name": "Jawa Barat",
+    "type": "Provinsi",
+    "parent": "-"
+  },
+  {
+    "code": "3203",
+    "name": "Kab. Cianjur",
+    "type": "Kabupaten",
+    "parent": "Jawa Barat"
+  },
+  {
+    "code": "3205",
+    "name": "Kab. Garut",
+    "type": "Kabupaten",
+    "parent": "Jawa Barat"
+  },
+  {
+    "code": "3203.05",
+    "name": "Kec. Sukamaju",
+    "type": "Kecamatan",
+    "parent": "Kab. Cianjur"
+  },
+  {
+    "code": "3203.01",
+    "name": "Kec. Cianjur",
+    "type": "Kecamatan",
+    "parent": "Kab. Cianjur"
+  },
+  {
+    "code": "33",
+    "name": "Jawa Tengah",
+    "type": "Provinsi",
+    "parent": "-"
+  },
+  {
+    "code": "3321",
+    "name": "Kab. Demak",
+    "type": "Kabupaten",
+    "parent": "Jawa Tengah"
+  },
+  {
+    "code": "3321.03",
+    "name": "Kec. Demak",
+    "type": "Kecamatan",
+    "parent": "Kab. Demak"
+  },
+  {
+    "code": "35",
+    "name": "Jawa Timur",
+    "type": "Provinsi",
+    "parent": "-"
+  },
+  {
+    "code": "3508",
+    "name": "Kab. Lumajang",
+    "type": "Kabupaten",
+    "parent": "Jawa Timur"
+  },
+  {
+    "code": "3508.04",
+    "name": "Kec. Candipuro",
+    "type": "Kecamatan",
+    "parent": "Kab. Lumajang"
+  },
+  {
+    "code": "52",
+    "name": "Nusa Tenggara Barat",
+    "type": "Provinsi",
+    "parent": "-"
+  },
+  {
+    "code": "5208",
+    "name": "Kab. Lombok Utara",
+    "type": "Kabupaten",
+    "parent": "Nusa Tenggara Barat"
+  },
+  {
+    "code": "72",
+    "name": "Sulawesi Tengah",
+    "type": "Provinsi",
+    "parent": "-"
+  },
+  {
+    "code": "7271",
+    "name": "Kota Palu",
+    "type": "Kota",
+    "parent": "Sulawesi Tengah"
+  },
+  {
+    "code": "13",
+    "name": "Sumatera Barat",
+    "type": "Provinsi",
+    "parent": "-"
+  },
+  {
+    "code": "1371",
+    "name": "Kota Padang",
+    "type": "Kota",
+    "parent": "Sumatera Barat"
+  }
+]

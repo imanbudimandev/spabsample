@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useId,
   useMemo,
   useRef,
@@ -6,6 +7,7 @@ import {
   type ChangeEvent,
   type ReactNode,
 } from "react"
+import { useDb, usePersistedState } from "./db/client"
 
 type IconName = "alert" | "arrow" | "box" | "building" | "calendar" | "check" | "chevron" | "close" | "dashboard" | "document" | "download" | "eye" | "file" | "handshake" | "lock" | "logout" | "map" | "menu" | "money" | "more" | "package" | "receipt" | "search" | "settings" | "upload" | "user"
 
@@ -186,8 +188,6 @@ const menuItems: { label: string; icon: IconName }[] = [
   { label: "Kwitansi", icon: "receipt" },
   { label: "SPTJM", icon: "file" },
   { label: "PKS", icon: "handshake" },
-  { label: "Bukti Penerimaan", icon: "document" },
-  { label: "Realisasi", icon: "file" },
 ]
 
 const masterItems = [
@@ -203,6 +203,15 @@ const settingItems = [
   "Template Pakta",
   "Template SPTJM",
 ]
+
+const pelaporanItems = [
+  "RKAS",
+  "Invoice",
+  "BAST",
+  "PMK",
+  "Dokumentasi Hasil",
+] as const
+type PelaporanKind = (typeof pelaporanItems)[number]
 
 const documentKinds = ["RAB", "Pakta Integritas", "Kwitansi", "PKS"] as const
 type DocumentKind = (typeof documentKinds)[number]
@@ -371,34 +380,96 @@ const schools = [
   },
 ]
 
-type SchoolRecord = (typeof schools)[number]
+type SchoolkitKategori = "uang" | "barang"
+type SchoolRecord = (typeof schools)[number] & {
+  schoolkitKategori?: SchoolkitKategori
+}
 
-const receipts = [
-  {
-    number: "BP-2025-0182",
-    school: "SMP Negeri 1 Sukamaju",
-    date: "20 Mei 2025",
-    amount: "Rp185.000.000",
-    source: "APBN",
-    status: "Terverifikasi",
+function isSchoolkitBarang(school?: {
+  packages?: readonly string[]
+  schoolkitKategori?: string
+}) {
+  return (
+    Boolean(school?.packages?.includes("Schoolkit")) &&
+    school?.schoolkitKategori === "barang"
+  )
+}
+
+function isSchoolkitBarangOnly(school?: {
+  packages?: readonly string[]
+  schoolkitKategori?: string
+}) {
+  const packages = school?.packages ?? []
+  return (
+    packages.length === 1 &&
+    packages[0] === "Schoolkit" &&
+    school?.schoolkitKategori === "barang"
+  )
+}
+
+function uangMenus(school?: {
+  packages?: readonly string[]
+  schoolkitKategori?: string
+}) {
+  const packages = [...(school?.packages ?? [])]
+  if (!isSchoolkitBarang(school)) return packages
+  return packages.filter((menu) => menu !== "Schoolkit")
+}
+
+function financeDocRequired(school: SchoolRecord, kind: DocumentKind) {
+  if (kind === "PKS") return true
+  if (kind === "Pakta Integritas") return !isSchoolkitBarangOnly(school)
+  return uangMenus(school).length > 0
+}
+
+function useAffectedSchoolList() {
+  const { data } = useDb()
+  const stored = data.affectedSchools as SchoolRecord[] | undefined
+  return stored?.length ? stored : schools
+}
+
+function syncAffectedSchools(next: SchoolRecord[]) {
+  schools.splice(0, schools.length, ...next)
+}
+
+function schoolRelationMessage(
+  name: string,
+  data: {
+    signers?: { schoolName?: string }[]
+    docUploads?: Record<string, unknown>
+    rabDrafts?: Record<string, unknown>
+    kwitansiDrafts?: Record<string, unknown>
+    paktaDrafts?: Record<string, unknown>
+    sptjmDrafts?: Record<string, unknown>
+    pksDrafts?: Record<string, unknown>
+    pmkDrafts?: Record<string, unknown>
   },
-  {
-    number: "BP-2025-0181",
-    school: "SMP Negeri 4 Demak",
-    date: "19 Mei 2025",
-    amount: "Rp120.000.000",
-    source: "DSP",
-    status: "Terverifikasi",
-  },
-  {
-    number: "BP-2025-0180",
-    school: "SMP Negeri 2 Sumberwuluh",
-    date: "18 Mei 2025",
-    amount: "Rp210.000.000",
-    source: "APBN",
-    status: "Menunggu",
-  },
-]
+) {
+  if (data.signers?.some((item) => item.schoolName === name)) {
+    return "Sekolah masih punya data penandatangan. Hapus relasi itu dulu."
+  }
+  if (data.docUploads?.[name]) {
+    return "Sekolah masih punya unggahan dokumen. Hapus unggahan itu dulu."
+  }
+  const drafts = [
+    data.rabDrafts,
+    data.kwitansiDrafts,
+    data.paktaDrafts,
+    data.sptjmDrafts,
+    data.pksDrafts,
+    data.pmkDrafts,
+  ]
+  if (
+    drafts.some((collection) =>
+      Object.keys(collection ?? {}).some(
+        (key) => key === name || key.startsWith(`${name}::`),
+      ),
+    )
+  ) {
+    return "Sekolah masih punya draf dokumen. Hapus draf itu dulu."
+  }
+  return null
+}
 
 const pksSchools = [
   {
@@ -468,6 +539,7 @@ const pksSchools = [
 ]
 
 type PksSchool = typeof pksSchools[number]
+const initialPksSchools: PksSchool[] = pksSchools.map((item) => ({ ...item }))
 
 const signerRoleOptions = [
   { key: "kepala-sekolah", label: "Kepala Sekolah" },
@@ -1124,10 +1196,83 @@ function StatusPill({
   )
 }
 
+type DocApprovalStatus =
+  | "draft"
+  | "menunggu persetujuan"
+  | "disetujui"
+  | "perlu perubahan"
+
+type PortalRole = "admin" | "dinas" | "direktorat" | "school"
+
 type SignedUploadFile = {
   name: string
   size: number
   uploadedAt: string
+  approvalStatus?: Exclude<DocApprovalStatus, "draft">
+  reviewNote?: string
+  reviewedBy?: string
+  reviewedAt?: string
+}
+
+function canReviewDocuments(role: PortalRole) {
+  return role === "admin" || role === "dinas" || role === "direktorat"
+}
+
+function uploadApprovalStatus(
+  file: SignedUploadFile | null | undefined,
+): Exclude<DocApprovalStatus, "draft"> | null {
+  if (!file) return null
+  if (
+    file.approvalStatus === "disetujui" ||
+    file.approvalStatus === "perlu perubahan"
+  ) {
+    return file.approvalStatus
+  }
+  return "menunggu persetujuan"
+}
+
+function documentFlowStatus(
+  hasDraft: boolean,
+  file: SignedUploadFile | null | undefined,
+): DocApprovalStatus | "belum" {
+  const uploaded = uploadApprovalStatus(file)
+  if (uploaded) return uploaded
+  if (hasDraft) return "draft"
+  return "belum"
+}
+
+function documentFlowMeta(status: DocApprovalStatus | "belum"): {
+  label: string
+  tone: "blue" | "green" | "orange" | "red"
+} {
+  if (status === "disetujui") return { label: "Disetujui", tone: "green" }
+  if (status === "perlu perubahan") {
+    return { label: "Perlu perubahan", tone: "red" }
+  }
+  if (status === "menunggu persetujuan") {
+    return { label: "Menunggu persetujuan", tone: "orange" }
+  }
+  if (status === "draft") return { label: "Draft", tone: "blue" }
+  return { label: "Belum ada draf", tone: "orange" }
+}
+
+function DocFlowStatusPill({
+  hasDraft,
+  file,
+}: {
+  hasDraft: boolean
+  file: SignedUploadFile | null
+}) {
+  const meta = documentFlowMeta(documentFlowStatus(hasDraft, file))
+  return <StatusPill tone={meta.tone}>{meta.label}</StatusPill>
+}
+
+type PelaporanUploads = {
+  rkas: SignedUploadFile | null
+  invoice: SignedUploadFile | null
+  bast: SignedUploadFile | null
+  pmk: SignedUploadFile | null
+  dokumentasi: SignedUploadFile[]
 }
 
 type SchoolDocUploads = {
@@ -1136,16 +1281,70 @@ type SchoolDocUploads = {
   kwitansi: Record<string, SignedUploadFile | null>
   sptjm: SignedUploadFile | null
   pks: SignedUploadFile | null
+  pelaporan: PelaporanUploads
 }
 
 type DocUploadsMap = Record<string, SchoolDocUploads>
 
-function emptySchoolUploads(): SchoolDocUploads {
-  return { rab: {}, pakta: null, kwitansi: {}, sptjm: null, pks: null }
+function emptyPelaporanUploads(): PelaporanUploads {
+  return { rkas: null, invoice: null, bast: null, pmk: null, dokumentasi: [] }
 }
 
-function schoolDocUploads(all: DocUploadsMap, schoolName: string) {
-  return all[schoolName] ?? emptySchoolUploads()
+function emptySchoolUploads(): SchoolDocUploads {
+  return {
+    rab: {},
+    pakta: null,
+    kwitansi: {},
+    sptjm: null,
+    pks: null,
+    pelaporan: emptyPelaporanUploads(),
+  }
+}
+
+function schoolDocUploads(all: DocUploadsMap, schoolName: string): SchoolDocUploads {
+  const current = all[schoolName]
+  if (!current) return emptySchoolUploads()
+  return {
+    ...emptySchoolUploads(),
+    ...current,
+    pelaporan: {
+      ...emptyPelaporanUploads(),
+      ...current.pelaporan,
+      dokumentasi: current.pelaporan?.dokumentasi ?? [],
+      pmk: current.pelaporan?.pmk ?? null,
+    },
+  }
+}
+
+const DOKUMENTASI_MAX = 5
+
+function requiredPelaporanItems(school?: {
+  packages?: readonly string[]
+  schoolkitKategori?: string
+}): PelaporanKind[] {
+  if (isSchoolkitBarangOnly(school)) {
+    return pelaporanItems.filter(
+      (item) => item === "BAST" || item === "PMK" || item === "Dokumentasi Hasil",
+    )
+  }
+  return [...pelaporanItems]
+}
+
+function pelaporanKindDone(uploads: PelaporanUploads, kind: PelaporanKind) {
+  if (kind === "Dokumentasi Hasil") return uploads.dokumentasi.length > 0
+  if (kind === "RKAS") return Boolean(uploads.rkas)
+  if (kind === "Invoice") return Boolean(uploads.invoice)
+  if (kind === "PMK") return Boolean(uploads.pmk)
+  return Boolean(uploads.bast)
+}
+
+function pelaporanProgress(
+  uploads: PelaporanUploads,
+  school?: { packages?: readonly string[]; schoolkitKategori?: string },
+) {
+  const required = requiredPelaporanItems(school)
+  const done = required.filter((kind) => pelaporanKindDone(uploads, kind)).length
+  return { done, total: required.length }
 }
 
 function patchSchoolUploads(
@@ -1165,6 +1364,23 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function readSignedUpload(file: File) {
+  const allowed =
+    file.type === "application/pdf" ||
+    file.type === "image/jpeg" ||
+    file.type === "image/png" ||
+    /\.(pdf|jpe?g|png)$/i.test(file.name)
+  if (!allowed) return { error: "Unggah PDF, JPG, atau PNG (maks. 10 MB)." }
+  if (file.size > 10 * 1024 * 1024) return { error: "Ukuran berkas maksimal 10 MB." }
+  return {
+    file: {
+      name: file.name,
+      size: file.size,
+      uploadedAt: new Date().toLocaleString("id-ID"),
+    } satisfies SignedUploadFile,
+  }
+}
+
 function SignedDocumentUpload({
   documentLabel,
   file,
@@ -1172,6 +1388,12 @@ function SignedDocumentUpload({
   enabled = true,
   disabledHint,
   waitingLabel,
+  title,
+  hint,
+  trackApproval = false,
+  hasDraft = false,
+  canReview = false,
+  reviewerName = "",
 }: {
   documentLabel: string
   file: SignedUploadFile | null
@@ -1179,57 +1401,109 @@ function SignedDocumentUpload({
   enabled?: boolean
   disabledHint?: string
   waitingLabel?: string
+  title?: string
+  hint?: string
+  trackApproval?: boolean
+  hasDraft?: boolean
+  canReview?: boolean
+  reviewerName?: string
 }) {
   const inputId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState("")
+  const [changeOpen, setChangeOpen] = useState(false)
+  const [reviewNote, setReviewNote] = useState("")
+  const [reviewError, setReviewError] = useState("")
+  const approvalStatus = trackApproval ? uploadApprovalStatus(file) : null
+  const locked = approvalStatus === "disetujui"
+  const uploadEnabled = enabled && !locked
+  const flow = trackApproval
+    ? documentFlowMeta(documentFlowStatus(hasDraft, file))
+    : null
 
   const pickFile = (event: ChangeEvent<HTMLInputElement>) => {
     const next = event.target.files?.[0]
     event.target.value = ""
     if (!next) return
-    const allowed =
-      next.type === "application/pdf" ||
-      next.type === "image/jpeg" ||
-      next.type === "image/png" ||
-      /\.(pdf|jpe?g|png)$/i.test(next.name)
-    if (!allowed) {
-      setError("Unggah PDF, JPG, atau PNG hasil scan TTD cap basah.")
-      return
-    }
-    if (next.size > 10 * 1024 * 1024) {
-      setError("Ukuran berkas maksimal 10 MB.")
+    const parsed = readSignedUpload(next)
+    if ("error" in parsed) {
+      setError(parsed.error ?? "Berkas tidak dapat diunggah.")
       return
     }
     setError("")
-    onChange({
-      name: next.name,
-      size: next.size,
-      uploadedAt: new Date().toLocaleString("id-ID"),
-    })
+    setChangeOpen(false)
+    setReviewNote("")
+    onChange(
+      trackApproval
+        ? {
+            ...parsed.file,
+            approvalStatus: "menunggu persetujuan",
+            reviewNote: "",
+            reviewedBy: "",
+            reviewedAt: "",
+          }
+        : parsed.file,
+    )
   }
+
+  const applyReview = (status: "disetujui" | "perlu perubahan") => {
+    if (!file) return
+    if (status === "perlu perubahan" && !reviewNote.trim()) {
+      setReviewError("Isi catatan perubahan terlebih dahulu.")
+      return
+    }
+    setReviewError("")
+    setChangeOpen(false)
+    onChange({
+      ...file,
+      approvalStatus: status,
+      reviewNote: status === "perlu perubahan" ? reviewNote.trim() : "",
+      reviewedBy: reviewerName,
+      reviewedAt: new Date().toLocaleString("id-ID"),
+    })
+    setReviewNote("")
+  }
+
+  const statusHint = !enabled
+    ? disabledHint ||
+      "Simpan draf terlebih dahulu. Tombol unggah aktif setelah draf tersimpan."
+    : locked
+      ? "Dokumen sudah disetujui."
+      : approvalStatus === "perlu perubahan"
+        ? "Perbaiki dokumen sesuai catatan, lalu unggah ulang. Status kembali menjadi menunggu persetujuan."
+        : approvalStatus === "menunggu persetujuan"
+          ? "Dokumen menunggu persetujuan user dinas, direktorat, atau admin."
+          : hint ||
+            `Cetak ${documentLabel}, tanda tangani dan cap basah, lalu unggah hasil scan (PDF/JPG/PNG, maks. 10 MB).`
 
   return (
     <div className="mt-4 rounded-2xl border border-dashed border-border bg-surface/80 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-xs font-bold text-ink">
-            Unggah dokumen TTD cap basah
+            {title || "Unggah dokumen TTD cap basah"}
           </div>
           <div className="mt-1 text-[0.65rem] leading-5 text-muted">
-            {enabled
-              ? `Cetak ${documentLabel}, tanda tangani dan cap basah, lalu unggah hasil scan (PDF/JPG/PNG, maks. 10 MB).`
-              : disabledHint ||
-                "Simpan draf terlebih dahulu. Tombol unggah aktif setelah draf tersimpan."}
+            {trackApproval
+              ? statusHint
+              : enabled
+                ? hint ||
+                  `Cetak ${documentLabel}, tanda tangani dan cap basah, lalu unggah hasil scan (PDF/JPG/PNG, maks. 10 MB).`
+                : disabledHint ||
+                  "Simpan draf terlebih dahulu. Tombol unggah aktif setelah draf tersimpan."}
           </div>
         </div>
-        <StatusPill tone={file ? "green" : enabled ? "orange" : "blue"}>
-          {file
-            ? "Sudah unggah"
-            : enabled
-              ? "Belum unggah"
-              : waitingLabel || "Menunggu draf"}
-        </StatusPill>
+        {flow ? (
+          <StatusPill tone={flow.tone}>{flow.label}</StatusPill>
+        ) : (
+          <StatusPill tone={file ? "green" : enabled ? "orange" : "blue"}>
+            {file
+              ? "Sudah unggah"
+              : enabled
+                ? "Belum unggah"
+                : waitingLabel || "Menunggu draf"}
+          </StatusPill>
+        )}
       </div>
       {file ? (
         <div className="mt-3 space-y-3">
@@ -1246,10 +1520,73 @@ function SignedDocumentUpload({
               </div>
             </div>
           </div>
+          {file.approvalStatus === "perlu perubahan" && file.reviewNote && (
+            <div className="rounded-xl bg-red-soft px-3 py-2 text-[0.65rem] leading-5 text-danger">
+              Perlu perubahan
+              {file.reviewedBy ? ` oleh ${file.reviewedBy}` : ""}:{" "}
+              {file.reviewNote}
+            </div>
+          )}
+          {file.approvalStatus === "disetujui" && (
+            <div className="text-[0.65rem] font-semibold text-success">
+              Disetujui
+              {file.reviewedBy ? ` oleh ${file.reviewedBy}` : ""}
+              {file.reviewedAt ? ` · ${file.reviewedAt}` : ""}
+            </div>
+          )}
+          {canReview && approvalStatus === "menunggu persetujuan" && (
+            <div className="space-y-2 rounded-xl border border-border bg-white p-3">
+              <div className="text-[0.65rem] leading-5 text-muted">
+                Periksa dokumen. Setujui jika valid, atau minta perubahan jika
+                ada yang salah.
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  className="flex-1 bg-success px-3 py-2 text-xs font-bold text-white hover:bg-[#157a4c]"
+                  onClick={() => applyReview("disetujui")}
+                  type="button"
+                >
+                  Setujui
+                </Button>
+                <Button
+                  className="flex-1 border border-border px-3 py-2 text-xs font-bold text-ink hover:bg-surface"
+                  onClick={() => {
+                    setChangeOpen(true)
+                    setReviewError("")
+                  }}
+                  type="button"
+                >
+                  Perlu perubahan
+                </Button>
+              </div>
+              {changeOpen && (
+                <div className="space-y-2">
+                  <textarea
+                    className="h-20 w-full rounded-xl border border-border px-3 py-2 text-xs outline-none focus:border-primary"
+                    onChange={(event) => setReviewNote(event.target.value)}
+                    placeholder="Jelaskan bagian yang salah atau perlu diubah"
+                    value={reviewNote}
+                  />
+                  <Button
+                    className="w-full bg-primary px-3 py-2 text-xs font-bold text-white hover:bg-primary-dark"
+                    onClick={() => applyReview("perlu perubahan")}
+                    type="button"
+                  >
+                    Simpan status perlu perubahan
+                  </Button>
+                </div>
+              )}
+              {reviewError && (
+                <div className="text-[0.65rem] font-semibold text-danger">
+                  {reviewError}
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex gap-2">
             <Button
               className="flex-1 gap-2 border border-border px-3 py-2 text-xs font-bold text-ink hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
-              disabled={!enabled}
+              disabled={!uploadEnabled}
               onClick={() => inputRef.current?.click()}
               type="button"
             >
@@ -1257,7 +1594,7 @@ function SignedDocumentUpload({
             </Button>
             <Button
               className="px-3 py-2 text-xs font-bold text-danger hover:bg-red-soft disabled:cursor-not-allowed disabled:opacity-45"
-              disabled={!enabled}
+              disabled={!uploadEnabled}
               onClick={() => onChange(null)}
               type="button"
             >
@@ -1268,7 +1605,7 @@ function SignedDocumentUpload({
       ) : (
         <Button
           className="mt-3 w-full gap-2 bg-success px-4 py-2.5 text-xs font-bold text-white hover:bg-[#157a4c] disabled:cursor-not-allowed disabled:bg-success/40 disabled:hover:bg-success/40"
-          disabled={!enabled}
+          disabled={!uploadEnabled}
           onClick={() => inputRef.current?.click()}
           type="button"
         >
@@ -1283,7 +1620,124 @@ function SignedDocumentUpload({
       <input
         accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
         className="hidden"
-        disabled={!enabled}
+        disabled={!uploadEnabled}
+        id={inputId}
+        onChange={pickFile}
+        ref={inputRef}
+        type="file"
+      />
+    </div>
+  )
+}
+
+function MultiDocumentUpload({
+  documentLabel,
+  files,
+  onChange,
+  maxFiles,
+  wide = false,
+}: {
+  documentLabel: string
+  files: SignedUploadFile[]
+  onChange: (files: SignedUploadFile[]) => void
+  maxFiles: number
+  wide?: boolean
+}) {
+  const inputId = useId()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [error, setError] = useState("")
+  const canAdd = files.length < maxFiles
+
+  const pickFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const next = event.target.files?.[0]
+    event.target.value = ""
+    if (!next) return
+    if (!canAdd) {
+      setError(`Maksimal ${maxFiles} ${documentLabel.toLowerCase()}.`)
+      return
+    }
+    const parsed = readSignedUpload(next)
+    if ("error" in parsed) {
+      setError(parsed.error)
+      return
+    }
+    setError("")
+    onChange([...files, parsed.file])
+  }
+
+  return (
+    <div className="mt-4 rounded-2xl border border-dashed border-border bg-surface/80 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-bold text-ink">
+            Unggah {documentLabel.toLowerCase()}
+          </div>
+          <div className="mt-1 text-[0.65rem] leading-5 text-muted">
+            Unggah foto atau PDF. Maksimal {maxFiles} berkas, masing-masing 10
+            MB (PDF/JPG/PNG).
+          </div>
+        </div>
+        <StatusPill tone={files.length > 0 ? "green" : "orange"}>
+          {files.length}/{maxFiles} berkas
+        </StatusPill>
+      </div>
+      {files.length > 0 && (
+        <div
+          className={
+            wide
+              ? "mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
+              : "mt-3 max-h-28 space-y-2 overflow-y-auto"
+          }
+        >
+          {files.map((file, index) => (
+            <div
+              className="flex items-start gap-3 rounded-xl bg-white px-3 py-3"
+              key={`${file.name}-${file.uploadedAt}-${index}`}
+            >
+              <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-green-soft text-success">
+                <Icon name="check" className="size-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-xs font-bold text-ink">
+                  {file.name}
+                </div>
+                <div className="mt-1 text-[0.65rem] text-muted">
+                  {formatFileSize(file.size)} · {file.uploadedAt}
+                </div>
+              </div>
+              <Button
+                className="px-2 py-1 text-xs font-bold text-danger hover:bg-red-soft"
+                onClick={() =>
+                  onChange(files.filter((_, itemIndex) => itemIndex !== index))
+                }
+                type="button"
+              >
+                Hapus
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+      <Button
+        className="mt-3 w-full gap-2 bg-success px-4 py-2.5 text-xs font-bold text-white hover:bg-[#157a4c] disabled:cursor-not-allowed disabled:bg-success/40 disabled:hover:bg-success/40"
+        disabled={!canAdd}
+        onClick={() => inputRef.current?.click()}
+        type="button"
+      >
+        <Icon name="upload" className="size-4" />
+        {files.length === 0
+          ? `Unggah ${documentLabel}`
+          : `Tambah ${documentLabel} (${files.length}/${maxFiles})`}
+      </Button>
+      {error && (
+        <div className="mt-2 text-[0.65rem] font-semibold text-danger">
+          {error}
+        </div>
+      )}
+      <input
+        accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+        className="hidden"
+        disabled={!canAdd}
         id={inputId}
         onChange={pickFile}
         ref={inputRef}
@@ -1443,6 +1897,20 @@ function Sidebar({
                 {item.label}
               </Button>
             ))}
+          </div>
+
+          <div className="mt-3">
+            <Button
+              className={`w-full justify-start gap-3 px-3.5 py-3 text-sm font-semibold ${
+                active === "Pelaporan/LPJ"
+                  ? "bg-white text-primary shadow-md"
+                  : "text-white/70 hover:bg-white/10 hover:text-white"
+              }`}
+              onClick={() => select("Pelaporan/LPJ")}
+            >
+              <Icon name="file" />
+              Pelaporan/LPJ
+            </Button>
           </div>
 
           <div className="mb-3 mt-7 px-3 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-white/35">
@@ -1613,13 +2081,18 @@ function Dashboard({
 }) {
   const [province, setProvince] = useState("")
   const [regency, setRegency] = useState("")
+  const { data, revision } = useDb()
   const isSchoolPortal = Boolean(schoolName)
+  const sourceSchools =
+    (data.affectedSchools as SchoolRecord[] | undefined)?.length
+      ? (data.affectedSchools as SchoolRecord[])
+      : schools
   const visibleSchools = useMemo(
     () =>
       schoolName
-        ? schools.filter((school) => school.name === schoolName)
-        : schools,
-    [schoolName],
+        ? sourceSchools.filter((school) => school.name === schoolName)
+        : sourceSchools,
+    [schoolName, sourceSchools, revision],
   )
   const provinces = useMemo(
     () => [...new Set(visibleSchools.map((school) => school.province))].sort(),
@@ -1642,15 +2115,17 @@ function Dashboard({
   )
   const totalSchools = filteredSchools.length
   const documentStats = documentKinds.map((kind) => {
-    const uploaded = filteredSchools.filter(
-      (school) => school.documents[kind],
-    ).length
+    const applicable = filteredSchools.filter((school) =>
+      financeDocRequired(school, kind),
+    )
+    const uploaded = applicable.filter((school) => school.documents[kind]).length
+    const total = applicable.length
     return {
       kind,
       uploaded,
-      pending: totalSchools - uploaded,
-      percent:
-        totalSchools === 0 ? 0 : Math.round((uploaded / totalSchools) * 100),
+      total,
+      pending: total - uploaded,
+      percent: total === 0 ? 0 : Math.round((uploaded / total) * 100),
     }
   })
   const menuIcons: Record<AidMenuName, IconName> = {
@@ -1677,8 +2152,13 @@ function Dashboard({
     "Pakta Integritas",
     "Kwitansi",
   ]
-  const hasRequiredUploads = (school: SchoolRecord) =>
-    requiredUploadDocs.every((kind) => school.documents[kind])
+  const hasRequiredUploads = (school: SchoolRecord) => {
+    const required = requiredUploadDocs.filter((kind) =>
+      financeDocRequired(school, kind),
+    )
+    if (required.length === 0) return true
+    return required.every((kind) => school.documents[kind])
+  }
   const menuBarStats = aidMenuNames.map((name) => {
     const recipients = filteredSchools.filter((school) =>
       school.packages.includes(name),
@@ -1693,7 +2173,10 @@ function Dashboard({
     ...menuBarStats.map((item) => item.recipients),
     1,
   )
-  const totalDocumentSlots = totalSchools * documentKinds.length
+  const totalDocumentSlots = documentStats.reduce(
+    (sum, item) => sum + item.total,
+    0,
+  )
   const uploadedDocuments = documentStats.reduce(
     (sum, item) => sum + item.uploaded,
     0,
@@ -1860,15 +2343,15 @@ function Dashboard({
                 <div className="text-sm font-bold text-ink">{item.kind}</div>
                 <StatusPill
                   tone={
-                    totalSchools === 0
-                      ? "orange"
+                    item.total === 0
+                      ? "blue"
                       : item.pending === 0
                         ? "green"
                         : "orange"
                   }
                 >
-                  {totalSchools === 0
-                    ? "Tidak ada data"
+                  {item.total === 0
+                    ? "Tidak diwajibkan"
                     : item.pending === 0
                       ? "Lengkap"
                       : `${item.pending} belum`}
@@ -1877,7 +2360,7 @@ function Dashboard({
               <div className="mt-4 text-3xl font-extrabold text-ink">
                 {item.uploaded}
                 <span className="text-lg font-bold text-muted">
-                  /{totalSchools}
+                  /{item.total}
                 </span>
               </div>
               <div className="mt-1 text-xs text-muted">sudah unggah</div>
@@ -2062,7 +2545,22 @@ function SchoolTable({
   onAssign?: (school: SchoolRecord) => void
 }) {
   const [query, setQuery] = useState("")
-  const [schoolData, setSchoolData] = useState<SchoolRecord[]>(schools)
+  const { data: dbData } = useDb()
+  const [schoolData, setSchoolData] = usePersistedState<SchoolRecord[]>(
+    "affectedSchools",
+    schools,
+  )
+  const [pksRows, setPksRows] = usePersistedState<PksSchool[]>(
+    "pksSchools",
+    initialPksSchools,
+  )
+  useEffect(() => {
+    syncAffectedSchools(schoolData)
+  }, [schoolData])
+  useEffect(() => {
+    if (!pksRows.length) return
+    pksSchools.splice(0, pksSchools.length, ...pksRows)
+  }, [pksRows])
   const [formOpen, setFormOpen] = useState(false)
   const [editingName, setEditingName] = useState<string | null>(null)
   const emptySchool: SchoolRecord = {
@@ -2100,27 +2598,62 @@ function SchoolTable({
 
   const saveSchool = () => {
     if (!draft.name.trim() || !draft.location.trim() || !draft.date) return
-    if (editingName) {
-      setSchoolData((current) =>
-        current.map((school) =>
+    const next = editingName
+      ? schoolData.map((school) =>
           school.name === editingName ? { ...draft } : school,
-        ),
-      )
-    } else {
-      setSchoolData((current) => [{ ...draft }, ...current])
-    }
+        )
+      : [{ ...draft }, ...schoolData]
+    setSchoolData(next)
+    syncAffectedSchools(next)
+    const masterList = (dbData.schools as typeof masterSchools | undefined) ?? masterSchools
+    const master = masterList.find((item) => item.name === draft.name)
+    setPksRows((current) => {
+      let rows = current
+      if (editingName && editingName !== draft.name) {
+        rows = rows.map((item) =>
+          item.name === editingName ? { ...item, name: draft.name } : item,
+        )
+      }
+      const existing = rows.find((item) => item.name === draft.name)
+      const payload: PksSchool = {
+        name: draft.name,
+        npsn: master?.npsn ?? existing?.npsn ?? "",
+        address:
+          existing?.address ||
+          [draft.location, draft.regency, draft.province]
+            .filter(Boolean)
+            .join(", "),
+        principal: master?.principal ?? existing?.principal ?? "",
+        number:
+          existing?.number ??
+          `SPAB/PKS/${String(rows.length + 1).padStart(4, "0")}/V/2025`,
+        amount: existing?.amount ?? "Rp0",
+      }
+      if (existing) {
+        return rows.map((item) =>
+          item.name === draft.name ? { ...existing, ...payload } : item,
+        )
+      }
+      return [payload, ...rows]
+    })
     setFormOpen(false)
   }
 
   const deleteSchool = (school: SchoolRecord) => {
+    const related = schoolRelationMessage(school.name, dbData)
+    if (related) {
+      window.alert(related)
+      return
+    }
     if (
       window.confirm(
         `Hapus data ${school.name}? Tindakan ini tidak dapat dibatalkan.`,
       )
     ) {
-      setSchoolData((current) =>
-        current.filter((item) => item.name !== school.name),
-      )
+      const next = schoolData.filter((item) => item.name !== school.name)
+      setSchoolData(next)
+      syncAffectedSchools(next)
+      setPksRows((current) => current.filter((item) => item.name !== school.name))
     }
   }
 
@@ -2222,8 +2755,14 @@ function SchoolTable({
                   {school.students}
                 </td>
                 <td className="px-5 py-4">
-                  <StatusPill tone={school.menuCount ? "green" : "orange"}>
-                    {school.menuCount}
+                  <StatusPill
+                    tone={
+                      (school.packages?.length ?? school.menuCount)
+                        ? "green"
+                        : "orange"
+                    }
+                  >
+                    {school.packages?.length ?? school.menuCount}
                   </StatusPill>
                 </td>
                 <td className="px-5 py-4">
@@ -2455,114 +2994,1004 @@ function SchoolTable({
   )
 }
 
-function ReceiptPage({ schoolName }: { schoolName?: string }) {
-  const rows = schoolName
-    ? receipts.filter((item) => item.school === schoolName)
-    : receipts
-  const waiting = rows.filter((item) => item.status === "Menunggu").length
+type PmkDraft = {
+  aidName: string
+  skNumber: string
+  pksNumber: string
+  nominal: string
+  aidKind: string
+  received: string
+  used: string
+  unused: string
+  usage: string
+  signPlace: string
+  signDate: string
+  updatedAt: string
+}
+
+const pmkInstructions = [
+  "Diisi dengan nama Satuan Pendidikan bantuan sosial.",
+  "Diisi dengan nama pimpinan Satuan Pendidikan bantuan sosial.",
+  "Diisi dengan alamat lembaga penerima bantuan sosial.",
+  "Diisi dengan nama bantuan sosial.",
+  "Diisi dengan nomor dan tanggal SK Penetapan Penerima Bantuan Sosial.",
+  "Diisi dengan nomor dan tanggal Perjanjian Kerja Sama.",
+  "Diisi dengan nama bantuan sosial.",
+  "Diisi dengan nilai bantuan sosial yang telah diterima.",
+  "Diisi dengan jenis bantuan sosial yang diterima (uang/barang/jasa).",
+  "Diisi dengan jumlah bantuan sosial yang telah diterima.",
+  "Diisi dengan jumlah bantuan sosial yang telah digunakan.",
+  "Diisi dengan jumlah bantuan sosial yang belum dimanfaatkan.",
+  "Diisi dengan penjelasan penggunaan bantuan sosial.",
+  "Diisi dengan nama bantuan sosial (sama dengan nomor 7).",
+  "Diisi dengan nama bantuan sosial (sama dengan nomor 7).",
+  "Diisi dengan nama kota, tanggal dan tahun Laporan Pertanggungjawaban Bantuan Sosial ditandatangani.",
+  "Diisi dengan nama Satuan Pendidikan bantuan sosial.",
+  "Diisi dengan nama pimpinan Satuan Pendidikan bantuan sosial.",
+]
+
+function pmkAidKind(school?: {
+  packages?: readonly string[]
+  schoolkitKategori?: string
+}) {
+  const packages = school?.packages ?? []
+  if (packages.length === 0) return ""
+  const barang = isSchoolkitBarang(school)
+  const uang = uangMenus(school).length > 0
+  if (barang && uang) return "uang dan barang"
+  if (barang) return "barang"
+  return "uang"
+}
+
+function pmkNominalText(
+  school: SchoolRecord | undefined,
+  packages: Record<string, AidItem[]>,
+) {
+  const menus = school?.packages ?? []
+  const total = menus.reduce(
+    (sum, menu) => sum + menuPackageTotal(menu, packages),
+    0,
+  )
+  if (total > 0) {
+    return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(
+      total,
+    )
+  }
+  const amount = pksSchools.find((item) => item.name === school?.name)?.amount
+  if (!amount || amount === "Rp0") return ""
+  return amount.replace(/^Rp\s*/i, "")
+}
+
+function emptyPmkDraft(
+  school: SchoolRecord | undefined,
+  packages: Record<string, AidItem[]>,
+): PmkDraft {
+  const pks = pksSchools.find((item) => item.name === school?.name)
+  return {
+    aidName: joinMenuNames([...(school?.packages ?? [])]),
+    skNumber: "",
+    pksNumber: pks?.number ?? "",
+    nominal: pmkNominalText(school, packages),
+    aidKind: pmkAidKind(school),
+    received: "",
+    used: "",
+    unused: "",
+    usage: "",
+    signPlace: school?.regency ?? "",
+    signDate: "",
+    updatedAt: "",
+  }
+}
+
+function pmkIdentity(school: SchoolRecord | undefined, signers: SignerRecord[]) {
+  const pks = pksSchools.find((item) => item.name === school?.name)
+  const signer = schoolSignerView(signers, school?.name ?? "", {
+    name: pks?.principal,
+    place: school?.regency,
+  })
+  return {
+    schoolName: school?.name ?? "",
+    principal: signer.name,
+    address: pks?.address || school?.location || "",
+  }
+}
+
+function PmkFill({ value, wide = false }: { value: string; wide?: boolean }) {
+  const text = value.trim()
+  if (!text) {
+    return (
+      <span
+        className={`inline-block border-b border-black align-baseline ${
+          wide ? "w-full min-w-[8rem]" : "min-w-[9rem]"
+        }`}
+      >
+        &nbsp;
+      </span>
+    )
+  }
+  return <span className="font-semibold">{text}</span>
+}
+
+function PmkDocument({
+  identity,
+  draft,
+}: {
+  identity: { schoolName: string; principal: string; address: string }
+  draft: PmkDraft
+}) {
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <div>
-          <div className="text-2xl font-extrabold text-ink">
-            Bukti Penerimaan
+    <div className="pmk-print-root space-y-6">
+      <article className="pmk-sheet mx-auto text-[11px] leading-5 shadow-xl">
+        <h1 className="mb-4 text-center text-[13px] font-bold uppercase tracking-wide">
+          Laporan Pertanggungjawaban Bantuan Sosial
+        </h1>
+        <ol className="list-decimal space-y-1 pl-5">
+          <li>
+            Nama Satuan Pendidikan : <PmkFill value={identity.schoolName} />
+          </li>
+          <li>
+            Nama Kepala Satuan Pendidikan :{" "}
+            <PmkFill value={identity.principal} />
+          </li>
+          <li>
+            Alamat Satuan Pendidikan : <PmkFill value={identity.address} wide />
+          </li>
+          <li>
+            Nama Bantuan : Bantuan Sosial <PmkFill value={draft.aidName} />
+          </li>
+        </ol>
+        <p className="mt-3">
+          Berdasarkan Surat Keputusan Nomor <PmkFill value={draft.skNumber} />{" "}
+          dan Perjanjian Kerja Sama Nomor <PmkFill value={draft.pksNumber} />,
+          telah menerima Bantuan Sosial <PmkFill value={draft.aidName} /> dengan
+          nilai nominal sebesar Rp <PmkFill value={draft.nominal} />.
+        </p>
+        <p className="mt-3">
+          Sehubungan dengan hal tersebut, dengan ini Saya menyampaikan Laporan
+          Pertanggungjawaban Bantuan sebagai berikut:
+        </p>
+        <ol className="mt-2 list-decimal space-y-1 pl-5">
+          <li>
+            Laporan penerimaan Bantuan Sosial berupa{" "}
+            <PmkFill value={draft.aidKind} />:
+            <div className="mt-1 space-y-1 pl-4">
+              <div>
+                a. Jumlah bantuan yang telah diterima :{" "}
+                <PmkFill value={draft.received} wide />
+              </div>
+              <div>
+                b. Jumlah bantuan yang digunakan :{" "}
+                <PmkFill value={draft.used} wide />
+              </div>
+              <div>
+                c. Jumlah bantuan yang belum dimanfaatkan :{" "}
+                <PmkFill value={draft.unused} wide />
+              </div>
+            </div>
+          </li>
+          <li className="mt-1">
+            Bantuan Sosial sebagaimana disebut di atas telah dipergunakan untuk{" "}
+            <PmkFill value={draft.usage} wide /> berdasarkan Perjanjian Kerja
+            Sama tersebut di atas.
+          </li>
+        </ol>
+        <p className="mt-3">
+          Berdasarkan hal tersebut di atas, Saya dengan ini menyatakan dengan
+          sebenar-benarnya bahwa:
+        </p>
+        <ol className="mt-2 list-decimal space-y-1 pl-5">
+          <li>
+            Telah menggunakan/menyalurkan*) Bantuan Sosial{" "}
+            <PmkFill value={draft.aidName} /> sesuai dengan Perjanjian Kerja
+            Sama tersebut di atas.
+          </li>
+          <li>
+            Apabila di kemudian hari, atas penggunaan Bantuan Sosial{" "}
+            <PmkFill value={draft.aidName} /> mengakibatkan kerugian Negara maka
+            saya bersedia dituntut penggantian kerugian negara dimaksud sesuai
+            dengan ketentuan peraturan perundang-undangan.
+          </li>
+        </ol>
+        <p className="mt-3">
+          Demikian Laporan Pertanggungjawaban Bantuan Sosial ini kami buat
+          dengan sesungguhnya dan penuh tanggung jawab.
+        </p>
+        <div className="mt-6 ml-auto w-[16rem] text-center">
+          <div>
+            <PmkFill value={draft.signPlace} />,{" "}
+            <PmkFill value={draft.signDate} />
           </div>
-          <div className="mt-1 text-sm text-muted">
-            Dokumentasi penerimaan dana bantuan oleh satuan pendidikan
+          <div className="mt-1">{identity.schoolName}</div>
+          <div className="mt-3">Penerima Bantuan Sosial,</div>
+          <div className="mx-auto mt-2 w-24 border border-black px-2 py-3 text-[9px] leading-4">
+            Materai
+            <br />
+            Rp10.000,-
+          </div>
+          <div className="mt-8 font-semibold">
+            <PmkFill value={identity.principal} />
           </div>
         </div>
-        <Button className="gap-2 bg-primary px-5 py-3 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary-dark">
-          <span className="text-lg leading-none">+</span> Tambah Penerimaan
-        </Button>
+        <p className="mt-6 text-[10px]">
+          *) Coret salah satu apabila tidak sesuai.
+        </p>
+      </article>
+      <article className="pmk-sheet mx-auto text-[11px] leading-5 shadow-xl">
+        <h1 className="text-center text-[13px] font-bold uppercase">
+          Petunjuk Pengisian
+        </h1>
+        <h2 className="mt-1 text-center text-[11px] font-bold uppercase">
+          Laporan Pertanggungjawaban Bantuan Sosial - Lampiran A
+        </h2>
+        <ol className="mt-4 list-decimal space-y-1.5 pl-5">
+          {pmkInstructions.map((item, index) => (
+            <li key={index}>{item}</li>
+          ))}
+        </ol>
+      </article>
+    </div>
+  )
+}
+
+function pmkPdfLines(
+  identity: { schoolName: string; principal: string; address: string },
+  draft: PmkDraft,
+) {
+  const fill = (value: string) => value.trim() || "____________________"
+  const pageOne = [
+    "LAPORAN PERTANGGUNGJAWABAN BANTUAN SOSIAL",
+    "",
+    `1. Nama Satuan Pendidikan : ${fill(identity.schoolName)}`,
+    `2. Nama Kepala Satuan Pendidikan : ${fill(identity.principal)}`,
+    `3. Alamat Satuan Pendidikan : ${fill(identity.address)}`,
+    `4. Nama Bantuan : Bantuan Sosial ${fill(draft.aidName)}`,
+    "",
+    `Berdasarkan Surat Keputusan Nomor ${fill(draft.skNumber)} dan Perjanjian Kerja`,
+    `Sama Nomor ${fill(draft.pksNumber)}, telah menerima Bantuan Sosial`,
+    `${fill(draft.aidName)} dengan nilai nominal sebesar Rp ${fill(draft.nominal)}.`,
+    "",
+    "Sehubungan dengan hal tersebut, dengan ini Saya menyampaikan Laporan",
+    "Pertanggungjawaban Bantuan sebagai berikut:",
+    `1. Laporan penerimaan Bantuan Sosial berupa ${fill(draft.aidKind)}:`,
+    `a. Jumlah bantuan yang telah diterima : ${fill(draft.received)}`,
+    `b. Jumlah bantuan yang digunakan : ${fill(draft.used)}`,
+    `c. Jumlah bantuan yang belum dimanfaatkan : ${fill(draft.unused)}`,
+    "2. Bantuan Sosial sebagaimana disebut di atas telah dipergunakan untuk",
+    `${fill(draft.usage)} berdasarkan Perjanjian Kerja Sama tersebut di atas.`,
+    "",
+    "Berdasarkan hal tersebut di atas, Saya dengan ini menyatakan dengan sebenar-benarnya bahwa:",
+    `1. Telah menggunakan/menyalurkan*) Bantuan Sosial ${fill(draft.aidName)}`,
+    "sesuai dengan Perjanjian Kerja Sama tersebut di atas.",
+    "2. Apabila di kemudian hari, atas penggunaan Bantuan Sosial",
+    `${fill(draft.aidName)} mengakibatkan kerugian Negara maka saya bersedia`,
+    "dituntut penggantian kerugian negara dimaksud sesuai dengan ketentuan peraturan",
+    "perundang-undangan.",
+    "",
+    "Demikian Laporan Pertanggungjawaban Bantuan Sosial ini kami buat dengan sesungguhnya",
+    "dan penuh tanggung jawab.",
+    "",
+    `${fill(draft.signPlace)}, ${fill(draft.signDate)}`,
+    identity.schoolName || "____________________",
+    "Penerima Bantuan Sosial,",
+    "Materai Rp10.000,-",
+    identity.principal || "____________________",
+    "",
+    "*) Coret salah satu apabila tidak sesuai.",
+  ]
+  const pageTwo = [
+    "PETUNJUK PENGISIAN",
+    "LAPORAN PERTANGGUNGJAWABAN BANTUAN SOSIAL - LAMPIRAN A",
+    "",
+    ...pmkInstructions.map((item, index) => `(${index + 1}) ${item}`),
+  ]
+  return [pageOne, pageTwo]
+}
+
+function createTwoPagePdf(pages: string[][]) {
+  const escapePdf = (text: string) =>
+    text.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)")
+  const wrap = (text: string) => {
+    const max = 90
+    if (text.length <= max) return [text]
+    const words = text.split(" ")
+    const lines: string[] = []
+    let current = ""
+    words.forEach((word) => {
+      const next = current ? `${current} ${word}` : word
+      if (next.length > max && current) {
+        lines.push(current)
+        current = word
+      } else {
+        current = next
+      }
+    })
+    if (current) lines.push(current)
+    return lines
+  }
+  const contents = pages.map((page) => {
+    const lines = page.flatMap((line) => wrap(line))
+    const body = [
+      "BT",
+      "/F1 11 Tf",
+      "48 800 Td",
+      `(${escapePdf(lines[0] ?? "")}) Tj`,
+      "/F1 9 Tf",
+      ...lines.slice(1).flatMap((line) => ["0 -14 Td", `(${escapePdf(line)}) Tj`]),
+      "ET",
+    ].join("\n")
+    return `<< /Length ${body.length} >>\nstream\n${body}\nendstream`
+  })
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 7 0 R >> >> /Contents 4 0 R >>",
+    contents[0],
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 7 0 R >> >> /Contents 6 0 R >>",
+    contents[1],
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ]
+  let pdf = "%PDF-1.4\n"
+  const offsets = [0]
+  objects.forEach((object, index) => {
+    offsets.push(pdf.length)
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`
+  })
+  const xrefOffset = pdf.length
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+  offsets.slice(1).forEach((offset) => {
+    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`
+  })
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`
+  return new Blob([pdf], { type: "application/pdf" })
+}
+
+const pelaporanCardMeta: Record<
+  PelaporanKind,
+  { description: string; icon: IconName }
+> = {
+  RKAS: {
+    description:
+      "Unggah satu berkas Rencana Kegiatan dan Anggaran Sekolah.",
+    icon: "money",
+  },
+  Invoice: {
+    description: "Unggah satu berkas invoice pengadaan bantuan.",
+    icon: "receipt",
+  },
+  BAST: {
+    description: "Unggah satu berkas Berita Acara Serah Terima.",
+    icon: "handshake",
+  },
+  PMK: {
+    description:
+      "Buat draf laporan pertanggungjawaban, cetak 2 lembar, tanda tangani, lalu unggah.",
+    icon: "file",
+  },
+  "Dokumentasi Hasil": {
+    description: `Unggah foto atau PDF hasil kegiatan, maksimal ${DOKUMENTASI_MAX} berkas.`,
+    icon: "document",
+  },
+}
+
+function PelaporanLpjPage({
+  mode = "admin",
+  schoolName,
+  docUploads = {},
+  onChangeDocUploads,
+}: {
+  mode?: "admin" | "school"
+  schoolName?: string
+  docUploads?: DocUploadsMap
+  onChangeDocUploads?: (next: DocUploadsMap) => void
+}) {
+  const schoolList = useAffectedSchoolList()
+  const lockedSchool = mode === "school" ? (schoolName ?? schoolList[0]?.name) : null
+  const [selectedSchool, setSelectedSchool] = useState<string | null>(
+    lockedSchool,
+  )
+  const [query, setQuery] = useState("")
+  const [province, setProvince] = useState("")
+  const [completeness, setCompleteness] = useState<
+    "all" | "complete" | "incomplete"
+  >("all")
+  const { data: dbData } = useDb()
+  const aidPackages =
+    (dbData.menus as Record<string, AidItem[]> | undefined) ?? initialAidPackages
+  const signerRows =
+    (dbData.signers as SignerRecord[] | undefined) ?? initialSigners
+  const [pmkDrafts, setPmkDrafts] = usePersistedState<Record<string, PmkDraft>>(
+    "pmkDrafts",
+    {},
+  )
+  const [pmkView, setPmkView] = useState<"cards" | "edit" | "preview">("cards")
+  const [pmkEditor, setPmkEditor] = useState<PmkDraft | null>(null)
+  const [pmkSaved, setPmkSaved] = useState("")
+  useEffect(() => {
+    if (pmkView !== "preview") return
+    document.body.classList.add("pmk-print")
+    return () => document.body.classList.remove("pmk-print")
+  }, [pmkView])
+  const provinces = [...new Set(schoolList.map((item) => item.province))]
+  const activeSchool = lockedSchool ?? selectedSchool
+  const uploads = activeSchool
+    ? schoolDocUploads(docUploads, activeSchool).pelaporan
+    : emptyPelaporanUploads()
+  const school = schoolList.find((item) => item.name === activeSchool)
+  const requiredItems = requiredPelaporanItems(school)
+
+  const patchPelaporan = (
+    schoolTarget: string,
+    next: (current: PelaporanUploads) => PelaporanUploads,
+  ) => {
+    onChangeDocUploads?.(
+      patchSchoolUploads(docUploads, schoolTarget, (current) => ({
+        ...current,
+        pelaporan: next(current.pelaporan),
+      })),
+    )
+  }
+
+  const listRows = schoolList
+    .map((item) => {
+      const files = schoolDocUploads(docUploads, item.name).pelaporan
+      const progress = pelaporanProgress(files, item)
+      return { school: item, files, progress }
+    })
+    .filter((row) => {
+      const haystack =
+        `${row.school.name} ${row.school.regency} ${row.school.province}`.toLowerCase()
+      if (query && !haystack.includes(query.toLowerCase())) return false
+      if (province && row.school.province !== province) return false
+      const complete = row.progress.done === row.progress.total
+      if (completeness === "complete" && !complete) return false
+      if (completeness === "incomplete" && complete) return false
+      return true
+    })
+    .sort((left, right) => {
+      if (left.progress.done !== right.progress.done) {
+        return left.progress.done - right.progress.done
+      }
+      return left.school.name.localeCompare(right.school.name)
+    })
+
+  const completeCount = schoolList.filter((item) => {
+    const progress = pelaporanProgress(
+      schoolDocUploads(docUploads, item.name).pelaporan,
+      item,
+    )
+    return progress.done === progress.total
+  }).length
+  const incompleteCount = schoolList.length - completeCount
+
+  const cards = activeSchool ? (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      {requiredItems.map((item) => {
+        const dokumentasiWide = item === "Dokumentasi Hasil"
+        return (
+          <div
+            className={`card flex flex-col p-5 ${
+              dokumentasiWide ? "lg:col-span-3" : "min-h-[17.5rem]"
+            }`}
+            id={`pelaporan-card-${item}`}
+            key={item}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-bold text-ink">{item}</div>
+                <div className="mt-1 text-xs leading-5 text-muted">
+                  {pelaporanCardMeta[item].description}
+                </div>
+              </div>
+              <div className="grid size-10 shrink-0 place-items-center rounded-2xl bg-blue-soft text-primary">
+                <Icon name={pelaporanCardMeta[item].icon} className="size-5" />
+              </div>
+            </div>
+            <div className="mt-auto">
+            {item === "Dokumentasi Hasil" ? (
+              <MultiDocumentUpload
+                documentLabel="Dokumentasi"
+                files={uploads.dokumentasi}
+                maxFiles={DOKUMENTASI_MAX}
+                wide={dokumentasiWide}
+                onChange={(next) =>
+                  patchPelaporan(activeSchool, (current) => ({
+                    ...current,
+                    dokumentasi: next,
+                  }))
+                }
+              />
+            ) : item === "PMK" ? (
+              <div className="mt-4 space-y-3">
+                <div className="text-[0.65rem] text-muted">
+                  {pmkDrafts[activeSchool]
+                    ? `Draf disimpan ${pmkDrafts[activeSchool].updatedAt}`
+                    : "Belum ada draf. Simpan draf sebelum unggah."}
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    className="w-full bg-primary px-4 py-2.5 text-xs font-bold text-white hover:bg-primary-dark"
+                    onClick={() => {
+                      setPmkEditor(
+                        pmkDrafts[activeSchool]
+                          ? { ...pmkDrafts[activeSchool] }
+                          : emptyPmkDraft(school, aidPackages),
+                      )
+                      setPmkSaved("")
+                      setPmkView("edit")
+                    }}
+                    type="button"
+                  >
+                    {pmkDrafts[activeSchool] ? "Edit draf PMK" : "Buat draf PMK"}
+                  </Button>
+                  {pmkDrafts[activeSchool] && (
+                    <Button
+                      className="w-full border border-border px-4 py-2.5 text-xs font-bold text-ink hover:bg-surface"
+                      onClick={() => setPmkView("preview")}
+                      type="button"
+                    >
+                      Preview PMK
+                    </Button>
+                  )}
+                </div>
+                <SignedDocumentUpload
+                  disabledHint="Simpan draf terlebih dahulu. Unggah aktif setelah draf tersimpan."
+                  documentLabel="PMK"
+                  enabled={Boolean(pmkDrafts[activeSchool])}
+                  file={uploads.pmk}
+                  hint="Cetak 2 lembar, tanda tangani dan cap basah, lalu unggah hasil scan."
+                  onChange={(next) =>
+                    patchPelaporan(activeSchool, (current) => ({
+                      ...current,
+                      pmk: next,
+                    }))
+                  }
+                  title="Unggah PMK bertanda tangan"
+                />
+              </div>
+            ) : (
+              <SignedDocumentUpload
+                documentLabel={item}
+                file={
+                  item === "RKAS"
+                    ? uploads.rkas
+                    : item === "Invoice"
+                      ? uploads.invoice
+                      : item === "PMK"
+                        ? uploads.pmk
+                        : uploads.bast
+                }
+                hint="Unggah PDF, JPG, atau PNG (maks. 10 MB)."
+                onChange={(next) =>
+                  patchPelaporan(activeSchool, (current) => ({
+                    ...current,
+                    rkas: item === "RKAS" ? next : current.rkas,
+                    invoice: item === "Invoice" ? next : current.invoice,
+                    bast: item === "BAST" ? next : current.bast,
+                    pmk: item === "PMK" ? next : current.pmk,
+                  }))
+                }
+                title={`Unggah ${item}`}
+              />
+            )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  ) : null
+
+  if (mode === "school" || activeSchool) {
+    const progress = pelaporanProgress(uploads, school)
+    const pelaporanHint = isSchoolkitBarangOnly(school)
+      ? `Unggah BAST, PMK, dan dokumentasi hasil. Dokumentasi maksimal ${DOKUMENTASI_MAX} berkas.`
+      : `Unggah RKAS, invoice, BAST, dan PMK masing-masing 1 berkas. Dokumentasi hasil maksimal ${DOKUMENTASI_MAX} berkas.`
+    const identity = pmkIdentity(school, signerRows)
+    const savedPmk = activeSchool ? pmkDrafts[activeSchool] : undefined
+    const previewDraft = savedPmk ?? emptyPmkDraft(school, aidPackages)
+    const pmkFields: { key: keyof PmkDraft; label: string }[] = [
+      { key: "aidName", label: "Nama bantuan, nomor 4, 7, 14, dan 15" },
+      { key: "skNumber", label: "Nomor dan tanggal SK penetapan, nomor 5" },
+      { key: "pksNumber", label: "Nomor dan tanggal perjanjian kerja sama, nomor 6" },
+      { key: "nominal", label: "Nilai nominal tanpa tulisan Rp, nomor 8" },
+      { key: "aidKind", label: "Jenis bantuan: uang, barang, atau jasa, nomor 9" },
+      { key: "received", label: "Jumlah bantuan yang telah diterima, nomor 10" },
+      { key: "used", label: "Jumlah bantuan yang digunakan, nomor 11" },
+      { key: "unused", label: "Jumlah bantuan yang belum dimanfaatkan, nomor 12" },
+      { key: "usage", label: "Penjelasan penggunaan bantuan, nomor 13" },
+      { key: "signPlace", label: "Kota penandatanganan, nomor 16" },
+      { key: "signDate", label: "Tanggal penandatanganan, nomor 16" },
+    ]
+
+    if (pmkView === "edit" && pmkEditor && activeSchool) {
+      return (
+        <div className="space-y-6">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+            <div>
+              <div className="text-2xl font-extrabold text-ink">
+                {savedPmk ? "Edit draf PMK" : "Buat draf PMK"}
+              </div>
+              <div className="mt-1 text-sm text-muted">
+                {activeSchool}. Data yang sudah ada terisi otomatis. Kolom yang
+                belum ada datanya dibiarkan kosong.
+              </div>
+            </div>
+            <Button
+              className="border border-border px-4 py-2.5 text-xs font-bold text-ink hover:bg-surface"
+              onClick={() => setPmkView("cards")}
+              type="button"
+            >
+              Kembali
+            </Button>
+          </div>
+          <div className="card grid gap-4 p-5 md:grid-cols-2">
+            <label className="block">
+              <span className="mb-2 block text-xs font-bold text-ink">
+                Nama satuan pendidikan
+              </span>
+              <input
+                className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm text-muted outline-none"
+                readOnly
+                value={identity.schoolName}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-xs font-bold text-ink">
+                Nama kepala satuan pendidikan
+              </span>
+              <input
+                className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm text-muted outline-none"
+                readOnly
+                value={identity.principal}
+              />
+            </label>
+            <label className="block md:col-span-2">
+              <span className="mb-2 block text-xs font-bold text-ink">
+                Alamat satuan pendidikan
+              </span>
+              <input
+                className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm text-muted outline-none"
+                readOnly
+                value={identity.address}
+              />
+            </label>
+            {pmkFields.map((field) => (
+              <label
+                className={field.key === "usage" ? "block md:col-span-2" : "block"}
+                key={field.key}
+              >
+                <span className="mb-2 block text-xs font-bold text-ink">
+                  {field.label}
+                </span>
+                {field.key === "usage" ? (
+                  <textarea
+                    className="h-24 w-full rounded-xl border border-border px-4 py-3 text-sm outline-none focus:border-primary"
+                    onChange={(event) =>
+                      setPmkEditor({ ...pmkEditor, usage: event.target.value })
+                    }
+                    value={pmkEditor.usage}
+                  />
+                ) : (
+                  <input
+                    className="w-full rounded-xl border border-border px-4 py-3 text-sm outline-none focus:border-primary"
+                    onChange={(event) =>
+                      setPmkEditor({
+                        ...pmkEditor,
+                        [field.key]: event.target.value,
+                      })
+                    }
+                    value={pmkEditor[field.key]}
+                  />
+                )}
+              </label>
+            ))}
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button
+              className="border border-border px-5 py-2.5 text-xs font-bold text-ink hover:bg-white"
+              onClick={() => setPmkView("cards")}
+              type="button"
+            >
+              Batal
+            </Button>
+            <Button
+              className="bg-primary px-5 py-2.5 text-xs font-bold text-white hover:bg-primary-dark"
+              onClick={() => {
+                const next = {
+                  ...pmkEditor,
+                  updatedAt: new Date().toLocaleString("id-ID"),
+                }
+                setPmkDrafts((current) => ({
+                  ...current,
+                  [activeSchool]: next,
+                }))
+                setPmkSaved("Draf PMK berhasil disimpan.")
+                setPmkView("preview")
+              }}
+              type="button"
+            >
+              Simpan draf
+            </Button>
+          </div>
+        </div>
+      )
+    }
+
+    if (pmkView === "preview" && activeSchool) {
+      return (
+        <div className="space-y-4">
+          <div className="no-print flex flex-col gap-3 rounded-2xl border border-border bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-base font-bold text-ink">Preview: PMK</div>
+              <div className="mt-1 text-xs text-muted">
+                Dua lembar tetap. Cetak, tanda tangani dan cap basah, lalu unggah
+                scan-nya.
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                className="gap-2 border border-border px-4 py-2.5 text-xs font-bold text-ink hover:bg-surface"
+                onClick={() => window.print()}
+                type="button"
+              >
+                Cetak
+              </Button>
+              <Button
+                className="gap-2 border border-border px-4 py-2.5 text-xs font-bold text-ink hover:bg-surface"
+                onClick={() => {
+                  const url = URL.createObjectURL(
+                    createTwoPagePdf(pmkPdfLines(identity, previewDraft)),
+                  )
+                  const link = document.createElement("a")
+                  link.href = url
+                  link.download = `PMK ${activeSchool}.pdf`
+                  link.click()
+                  URL.revokeObjectURL(url)
+                }}
+                type="button"
+              >
+                Download PDF
+              </Button>
+              <Button
+                className="gap-2 bg-primary px-4 py-2.5 text-xs font-bold text-white hover:bg-primary-dark"
+                onClick={() => setPmkView("cards")}
+                type="button"
+              >
+                Kembali
+              </Button>
+            </div>
+          </div>
+          <div className="no-print">
+            <SignedDocumentUpload
+              disabledHint="Simpan draf terlebih dahulu. Unggah aktif setelah draf tersimpan."
+              documentLabel="PMK"
+              enabled={Boolean(savedPmk)}
+              file={uploads.pmk}
+              hint="Cetak 2 lembar, tanda tangani dan cap basah, lalu unggah hasil scan."
+              onChange={(next) =>
+                patchPelaporan(activeSchool, (current) => ({
+                  ...current,
+                  pmk: next,
+                }))
+              }
+              title="Unggah PMK bertanda tangan"
+            />
+          </div>
+          <PmkDocument draft={previewDraft} identity={identity} />
+        </div>
+      )
+    }
+
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[0.16em] text-muted">
+              Pelaporan/LPJ
+            </div>
+            <div className="mt-1 text-2xl font-extrabold text-ink">
+              {activeSchool}
+            </div>
+            <div className="mt-1 text-sm text-muted">{pelaporanHint}</div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusPill tone={progress.done === progress.total ? "green" : "orange"}>
+              {progress.done}/{progress.total} lengkap
+            </StatusPill>
+            {mode === "admin" && (
+              <Button
+                className="border border-border px-4 py-2.5 text-xs font-bold text-ink hover:bg-surface"
+                onClick={() => {
+                  setPmkView("cards")
+                  setSelectedSchool(null)
+                }}
+              >
+                Kembali ke daftar
+              </Button>
+            )}
+          </div>
+        </div>
+        {school && (
+          <div className="text-xs text-muted">{school.location}</div>
+        )}
+        {pmkSaved && (
+          <div className="rounded-2xl bg-green-soft px-4 py-3 text-sm font-semibold text-success">
+            {pmkSaved}
+          </div>
+        )}
+        {cards}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="text-xs font-bold uppercase tracking-[0.16em] text-muted">
+          Pelaporan/LPJ
+        </div>
+        <div className="mt-1 text-2xl font-extrabold text-ink">
+          Pelaporan/LPJ
+        </div>
+        <div className="mt-1 text-sm text-muted">
+          Pantau kelengkapan unggahan per sekolah. PMK wajib untuk setiap sekolah.
+          Sekolah yang hanya menerima Schoolkit barang mengunggah BAST,
+          dokumentasi, dan PMK.
+        </div>
       </div>
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
-          label="Total Penerimaan"
-          value={schoolName ? String(rows.length) : "842"}
-          note="dokumen tahun ini"
-          icon="document"
+          label="Sekolah"
+          value={String(schoolList.length)}
+          note="penerima bantuan"
+          icon="building"
           tone="blue"
         />
         <StatCard
-          label="Dana Diterima"
-          value={schoolName ? (rows[0]?.amount ?? "Rp0") : "Rp18,4 M"}
-          note="telah tersalurkan"
-          icon="money"
+          label="LPJ lengkap"
+          value={String(completeCount)}
+          note="sesuai kewajiban"
+          icon="check"
           tone="green"
         />
         <StatCard
-          label="Menunggu Verifikasi"
-          value={schoolName ? String(waiting) : "24"}
-          note="perlu diperiksa"
+          label="Belum lengkap"
+          value={String(incompleteCount)}
+          note="perlu diunggah"
           icon="alert"
           tone="orange"
         />
       </div>
       <div className="card overflow-hidden">
-        <div className="flex flex-col gap-4 border-b border-border p-5 md:flex-row md:items-center md:justify-between">
-          <div className="text-base font-bold text-ink">
-            Daftar Bukti Penerimaan
-          </div>
+        <div className="flex flex-col gap-3 border-b border-border p-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="text-base font-bold text-ink">Daftar sekolah</div>
           <div className="flex flex-wrap gap-2">
             <label className="flex items-center gap-2 rounded-xl border border-border px-3 py-2.5 text-muted">
               <Icon name="search" className="size-4" />
               <input
                 className="w-44 bg-transparent text-xs outline-none"
-                placeholder="Cari nomor/sekolah"
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Cari nama sekolah..."
+                value={query}
               />
             </label>
-            <Button className="gap-2 border border-border px-4 py-2.5 text-xs font-semibold text-ink hover:bg-surface">
-              <Icon name="download" className="size-4" /> Ekspor
-            </Button>
+            <select
+              className="rounded-xl border border-border bg-white px-3 py-2.5 text-xs font-semibold text-ink outline-none"
+              onChange={(event) => setProvince(event.target.value)}
+              value={province}
+            >
+              <option value="">Semua provinsi</option>
+              {provinces.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+            <select
+              className="rounded-xl border border-border bg-white px-3 py-2.5 text-xs font-semibold text-ink outline-none"
+              onChange={(event) =>
+                setCompleteness(
+                  event.target.value as "all" | "complete" | "incomplete",
+                )
+              }
+              value={completeness}
+            >
+              <option value="all">Semua status</option>
+              <option value="incomplete">Belum lengkap</option>
+              <option value="complete">Sudah lengkap</option>
+            </select>
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[52rem]">
+          <table className="w-full min-w-[56rem]">
             <thead>
               <tr className="bg-surface text-left text-[0.65rem] font-bold uppercase tracking-wider text-muted">
-                <th className="px-5 py-3.5">Nomor Penerimaan</th>
                 <th className="px-5 py-3.5">Sekolah</th>
-                <th className="px-5 py-3.5">Tanggal</th>
-                <th className="px-5 py-3.5">Jumlah Dana</th>
-                <th className="px-5 py-3.5">Sumber</th>
-                <th className="px-5 py-3.5">Status</th>
+                <th className="px-5 py-3.5">Wilayah</th>
+                <th className="px-5 py-3.5">Progres</th>
+                {pelaporanItems.map((item) => (
+                  <th className="px-5 py-3.5" key={item}>
+                    {item === "Dokumentasi Hasil" ? "Dokumentasi" : item}
+                  </th>
+                ))}
                 <th className="px-5 py-3.5" />
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {rows.map((receipt) => (
-                <tr key={receipt.number} className="hover:bg-surface/70">
-                  <td className="px-5 py-4 text-xs font-bold text-primary">
-                    {receipt.number}
-                  </td>
-                  <td className="px-5 py-4 text-xs font-semibold text-ink">
-                    {receipt.school}
-                  </td>
-                  <td className="px-5 py-4 text-xs text-muted">
-                    {receipt.date}
-                  </td>
-                  <td className="px-5 py-4 text-xs font-bold text-ink">
-                    {receipt.amount}
-                  </td>
-                  <td className="px-5 py-4 text-xs text-muted">
-                    {receipt.source}
-                  </td>
-                  <td className="px-5 py-4">
-                    <StatusPill
-                      tone={
-                        receipt.status === "Terverifikasi" ? "green" : "orange"
-                      }
-                    >
-                      {receipt.status}
-                    </StatusPill>
-                  </td>
-                  <td className="px-5 py-4">
-                    <Button className="p-2 text-muted hover:bg-blue-soft hover:text-primary">
-                      <Icon name="eye" className="size-4" />
-                    </Button>
+              {listRows.length === 0 ? (
+                <tr>
+                  <td
+                    className="px-5 py-10 text-center text-sm text-muted"
+                    colSpan={pelaporanItems.length + 4}
+                  >
+                    Tidak ada sekolah yang sesuai filter.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                listRows.map((row) => (
+                  <tr className="hover:bg-surface/70" key={row.school.name}>
+                    <td className="px-5 py-4">
+                      <div className="text-xs font-bold text-ink">
+                        {row.school.name}
+                      </div>
+                      <div className="mt-1 text-[0.65rem] text-muted">
+                        NPSN{" "}
+                        {pksSchools.find((item) => item.name === row.school.name)
+                          ?.npsn ??
+                          masterSchools.find(
+                            (item) => item.name === row.school.name,
+                          )?.npsn ??
+                          "-"}
+                      </div>
+                    </td>
+                    <td className="px-5 py-4 text-xs text-muted">
+                      {row.school.location}
+                    </td>
+                    <td className="px-5 py-4">
+                      <StatusPill
+                        tone={
+                          row.progress.done === row.progress.total
+                            ? "green"
+                            : "orange"
+                        }
+                      >
+                        {row.progress.done}/{row.progress.total}
+                      </StatusPill>
+                    </td>
+                    {pelaporanItems.map((item) => {
+                      const applies = requiredPelaporanItems(row.school).includes(
+                        item,
+                      )
+                      if (!applies) {
+                        return (
+                          <td className="px-5 py-4" key={item}>
+                            <StatusPill tone="blue">Tidak wajib</StatusPill>
+                          </td>
+                        )
+                      }
+                      const done = pelaporanKindDone(row.files, item)
+                      const extra =
+                        item === "Dokumentasi Hasil"
+                          ? ` ${row.files.dokumentasi.length}/${DOKUMENTASI_MAX}`
+                          : ""
+                      return (
+                        <td className="px-5 py-4" key={item}>
+                          <StatusPill tone={done ? "green" : "orange"}>
+                            {done ? `Sudah${extra}` : "Belum"}
+                          </StatusPill>
+                        </td>
+                      )
+                    })}
+                    <td className="px-5 py-4">
+                      <Button
+                        className="bg-primary px-3 py-2 text-xs font-bold text-white hover:bg-primary-dark"
+                        onClick={() => setSelectedSchool(row.school.name)}
+                      >
+                        Unggah
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -2910,6 +4339,8 @@ function RabPage({
   signers = initialSigners,
   docUploads = {},
   onChangeDocUploads,
+  canReview = false,
+  reviewerName = "",
 }: {
   mode: "admin" | "school"
   schoolName?: string
@@ -2923,11 +4354,15 @@ function RabPage({
   signers?: SignerRecord[]
   docUploads?: DocUploadsMap
   onChangeDocUploads?: (next: DocUploadsMap) => void
+  canReview?: boolean
+  reviewerName?: string
 }) {
-  const [selectedSchool, setSelectedSchool] = useState(
-    schoolName ?? schools[0].name,
+  const schoolList = useAffectedSchoolList()
+  const [selectedSchool, setSelectedSchool] = useState(schoolName ?? "")
+  const [drafts, setDrafts] = usePersistedState<Record<string, RabDraft>>(
+    "rabDrafts",
+    {},
   )
-  const [drafts, setDrafts] = useState<Record<string, RabDraft>>({})
   const [view, setView] = useState<
     { kind: "list" } | { kind: "edit"; menu: string } | { kind: "preview"; menu: string }
   >({ kind: "list" })
@@ -2942,9 +4377,9 @@ function RabPage({
       })),
     )
   }
-  const school = schools.find((item) => item.name === selectedSchool)
+  const school = schoolList.find((item) => item.name === selectedSchool)
   const pks = pksSchools.find((item) => item.name === selectedSchool)
-  const menus = school?.packages ?? []
+  const menus = uangMenus(school)
   const schoolSigner = schoolSignerView(signers, selectedSchool, {
     name: signer?.name ?? pks?.principal ?? "",
     nip: signer?.nip,
@@ -3099,9 +4534,13 @@ function RabPage({
         </div>
         <div className="no-print">
             <SignedDocumentUpload
+              canReview={canReview}
               documentLabel={`RAB ${view.menu}`}
               file={schoolUploads.rab[view.menu] ?? null}
+              hasDraft
               onChange={(next) => changeRabUpload(view.menu, next)}
+              reviewerName={reviewerName}
+              trackApproval
             />
         </div>
         <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
@@ -3288,26 +4727,21 @@ function RabPage({
           </div>
         </div>
         {mode === "admin" && (
-          <label className="block sm:w-80">
+          <div className="block sm:w-96">
             <span className="mb-2 block text-xs font-bold text-ink">
               Sekolah
             </span>
-            <select
-              aria-label="Pilih sekolah untuk RAB"
-              className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-primary"
-              onChange={(event) => {
-                setSelectedSchool(event.target.value)
+            <SchoolSearchPicker
+              ariaLabel="Cari sekolah untuk RAB"
+              onChange={(name) => {
+                setSelectedSchool(name)
                 setView({ kind: "list" })
+                setSavedMessage("")
               }}
+              source="affected"
               value={selectedSchool}
-            >
-              {schools.map((item) => (
-                <option key={item.name} value={item.name}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
+            />
+          </div>
         )}
       </div>
       {savedMessage && (
@@ -3315,9 +4749,13 @@ function RabPage({
           {savedMessage}
         </div>
       )}
-      {menus.length === 0 ? (
+      {!selectedSchool ? (
+        <PickSchoolPrompt label="RAB" />
+      ) : menus.length === 0 ? (
         <div className="card px-6 py-16 text-center text-sm text-muted">
-          Sekolah ini belum memiliki menu bantuan, sehingga RAB belum tersedia.
+          {isSchoolkitBarangOnly(school)
+            ? "Schoolkit berbentuk barang, sehingga RAB tidak diperlukan."
+            : "Sekolah ini belum memiliki menu bantuan, sehingga RAB belum tersedia."}
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -3334,9 +4772,10 @@ function RabPage({
                   <div className="text-xs font-semibold uppercase tracking-wider text-muted">
                     RAB terpisah
                   </div>
-                  <StatusPill tone={draft ? "green" : "orange"}>
-                    {draft ? "Draf tersimpan" : "Belum ada draf"}
-                  </StatusPill>
+                  <DocFlowStatusPill
+                    file={schoolUploads.rab[menu] ?? null}
+                    hasDraft={Boolean(draft)}
+                  />
                 </div>
                 <div className="mt-2 text-lg font-extrabold text-ink">{menu}</div>
                 <div className="mt-1 text-xs text-muted">
@@ -3376,10 +4815,14 @@ function RabPage({
                   )}
                 </div>
                 <SignedDocumentUpload
+                  canReview={canReview}
                   documentLabel={`RAB ${menu}`}
                   enabled={Boolean(draft)}
                   file={schoolUploads.rab[menu] ?? null}
+                  hasDraft={Boolean(draft)}
                   onChange={(next) => changeRabUpload(menu, next)}
+                  reviewerName={reviewerName}
+                  trackApproval
                 />
             </div>
           )
@@ -3481,8 +4924,8 @@ function joinMenuNames(menus: string[]) {
   return `${menus.slice(0, -1).join(", ")} dan ${menus[menus.length - 1]}`
 }
 
-function getKwitansiGroups(menus: string[]) {
-  const hasSchoolkit = menus.includes("Schoolkit")
+function getKwitansiGroups(menus: string[], hideSchoolkit = false) {
+  const hasSchoolkit = menus.includes("Schoolkit") && !hideSchoolkit
   const otherMenus = menus.filter((menu) => menu !== "Schoolkit")
   const groups: {
     kind: KwitansiKind
@@ -3506,39 +4949,54 @@ function getKwitansiGroups(menus: string[]) {
   return groups
 }
 
-function pksPrerequisiteItems(schoolName: string, all: DocUploadsMap) {
-  const menus = schools.find((item) => item.name === schoolName)?.packages ?? []
+function pksPrerequisiteItems(
+  schoolName: string,
+  all: DocUploadsMap,
+  schoolList: SchoolRecord[] = schools,
+) {
+  const school = schoolList.find((item) => item.name === schoolName)
+  const menus = uangMenus(school)
   const files = schoolDocUploads(all, schoolName)
   const rabDone = menus.filter((menu) => files.rab[menu]).length
-  const groups = getKwitansiGroups(menus)
+  const groups = getKwitansiGroups(school?.packages ?? [], isSchoolkitBarang(school))
   const kwitansiDone = groups.filter((group) => files.kwitansi[group.kind]).length
   const items = [
-    {
-      label: "RAB",
-      done: menus.length > 0 && rabDone === menus.length,
-      detail:
-        menus.length === 0
-          ? "Tidak ada menu"
-          : `${rabDone}/${menus.length} menu`,
-    },
-    {
-      label: "Pakta Integritas",
-      done: Boolean(files.pakta),
-      detail: files.pakta ? "Sudah unggah" : "Belum unggah",
-    },
-    {
-      label: "Kwitansi",
-      done: groups.length > 0 && kwitansiDone === groups.length,
-      detail:
-        groups.length === 0
-          ? "Tidak ada kwitansi"
-          : `${kwitansiDone}/${groups.length} dokumen`,
-    },
-    {
-      label: "SPTJM",
-      done: Boolean(files.sptjm),
-      detail: files.sptjm ? "Sudah unggah" : "Belum unggah",
-    },
+    ...(menus.length > 0
+      ? [
+          {
+            label: "RAB",
+            done: rabDone === menus.length,
+            detail: `${rabDone}/${menus.length} menu`,
+          },
+        ]
+      : []),
+    ...(!isSchoolkitBarangOnly(school)
+      ? [
+          {
+            label: "Pakta Integritas",
+            done: Boolean(files.pakta),
+            detail: files.pakta ? "Sudah unggah" : "Belum unggah",
+          },
+        ]
+      : []),
+    ...(groups.length > 0
+      ? [
+          {
+            label: "Kwitansi",
+            done: kwitansiDone === groups.length,
+            detail: `${kwitansiDone}/${groups.length} dokumen`,
+          },
+        ]
+      : []),
+    ...(!isSchoolkitBarangOnly(school)
+      ? [
+          {
+            label: "SPTJM",
+            done: Boolean(files.sptjm),
+            detail: files.sptjm ? "Sudah unggah" : "Belum unggah",
+          },
+        ]
+      : []),
   ]
   return {
     items,
@@ -3657,6 +5115,8 @@ function KwitansiPage({
   signers = initialSigners,
   docUploads = {},
   onChangeDocUploads,
+  canReview = false,
+  reviewerName = "",
 }: {
   mode: "admin" | "school"
   schoolName?: string
@@ -3668,11 +5128,15 @@ function KwitansiPage({
   signers?: SignerRecord[]
   docUploads?: DocUploadsMap
   onChangeDocUploads?: (next: DocUploadsMap) => void
+  canReview?: boolean
+  reviewerName?: string
 }) {
-  const [selectedSchool, setSelectedSchool] = useState(
-    schoolName ?? schools[0].name,
+  const schoolList = useAffectedSchoolList()
+  const [selectedSchool, setSelectedSchool] = useState(schoolName ?? "")
+  const [drafts, setDrafts] = usePersistedState<Record<string, KwitansiDraft>>(
+    "kwitansiDrafts",
+    {},
   )
-  const [drafts, setDrafts] = useState<Record<string, KwitansiDraft>>({})
   const [view, setView] = useState<
     | { kind: "list" }
     | { kind: "edit"; receipt: KwitansiKind }
@@ -3692,9 +5156,12 @@ function KwitansiPage({
       })),
     )
   }
-  const school = schools.find((item) => item.name === selectedSchool)
+  const school = schoolList.find((item) => item.name === selectedSchool)
   const pks = pksSchools.find((item) => item.name === selectedSchool)
-  const groups = getKwitansiGroups(school?.packages ?? [])
+  const groups = getKwitansiGroups(
+    school?.packages ?? [],
+    isSchoolkitBarang(school),
+  )
   const yearDefault = "2026"
   const schoolSigner = schoolSignerView(signers, selectedSchool, {
     name: signer?.name ?? pks?.principal ?? "",
@@ -3805,9 +5272,13 @@ function KwitansiPage({
         </div>
         <div className="no-print">
             <SignedDocumentUpload
+              canReview={canReview}
               documentLabel={group?.title ?? "Kwitansi"}
               file={schoolUploads.kwitansi[view.receipt] ?? null}
+              hasDraft
               onChange={(next) => changeKwitansiUpload(view.receipt, next)}
+              reviewerName={reviewerName}
+              trackApproval
             />
         </div>
         <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
@@ -3967,26 +5438,21 @@ function KwitansiPage({
           </div>
         </div>
         {mode === "admin" && (
-          <label className="block sm:w-80">
+          <div className="block sm:w-96">
             <span className="mb-2 block text-xs font-bold text-ink">
               Sekolah
             </span>
-            <select
-              aria-label="Pilih sekolah untuk kwitansi"
-              className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-primary"
-              onChange={(event) => {
-                setSelectedSchool(event.target.value)
+            <SchoolSearchPicker
+              ariaLabel="Cari sekolah untuk kwitansi"
+              onChange={(name) => {
+                setSelectedSchool(name)
                 setView({ kind: "list" })
+                setSavedMessage("")
               }}
+              source="affected"
               value={selectedSchool}
-            >
-              {schools.map((item) => (
-                <option key={item.name} value={item.name}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
+            />
+          </div>
         )}
       </div>
       {savedMessage && (
@@ -3994,10 +5460,13 @@ function KwitansiPage({
           {savedMessage}
         </div>
       )}
-      {groups.length === 0 ? (
+      {!selectedSchool ? (
+        <PickSchoolPrompt label="kwitansi" />
+      ) : groups.length === 0 ? (
         <div className="card px-6 py-16 text-center text-sm text-muted">
-          Sekolah ini belum memiliki menu bantuan, sehingga kwitansi belum
-          tersedia.
+          {isSchoolkitBarangOnly(school)
+            ? "Schoolkit berbentuk barang, sehingga kwitansi tidak diperlukan."
+            : "Sekolah ini belum memiliki menu bantuan, sehingga kwitansi belum tersedia."}
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
@@ -4017,9 +5486,10 @@ function KwitansiPage({
                       ? "Menu Schoolkit"
                       : "Menu non-Schoolkit digabung"}
                   </div>
-                  <StatusPill tone={draft ? "green" : "orange"}>
-                    {draft ? "Draf tersimpan" : "Belum ada draf"}
-                  </StatusPill>
+                  <DocFlowStatusPill
+                    file={schoolUploads.kwitansi[group.kind] ?? null}
+                    hasDraft={Boolean(draft)}
+                  />
                 </div>
                 <div className="mt-2 text-lg font-extrabold text-ink">
                   {group.title}
@@ -4063,10 +5533,14 @@ function KwitansiPage({
                   )}
                 </div>
                 <SignedDocumentUpload
+                  canReview={canReview}
                   documentLabel={group.title}
                   enabled={Boolean(draft)}
                   file={schoolUploads.kwitansi[group.kind] ?? null}
+                  hasDraft={Boolean(draft)}
                   onChange={(next) => changeKwitansiUpload(group.kind, next)}
+                  reviewerName={reviewerName}
+                  trackApproval
                 />
               </div>
             )
@@ -4195,6 +5669,8 @@ function PaktaPage({
   templates = initialPaktaTemplates,
   docUploads = {},
   onChangeDocUploads,
+  canReview = false,
+  reviewerName = "",
 }: {
   mode: "admin" | "school"
   schoolName?: string
@@ -4209,11 +5685,15 @@ function PaktaPage({
   templates?: PaktaTemplate[]
   docUploads?: DocUploadsMap
   onChangeDocUploads?: (next: DocUploadsMap) => void
+  canReview?: boolean
+  reviewerName?: string
 }) {
-  const [selectedSchool, setSelectedSchool] = useState(
-    schoolName ?? schools[0].name,
+  const schoolList = useAffectedSchoolList()
+  const [selectedSchool, setSelectedSchool] = useState(schoolName ?? "")
+  const [drafts, setDrafts] = usePersistedState<Record<string, PaktaDraft>>(
+    "paktaDrafts",
+    {},
   )
-  const [drafts, setDrafts] = useState<Record<string, PaktaDraft>>({})
   const [view, setView] = useState<"list" | "edit" | "preview">("list")
   const [editor, setEditor] = useState<PaktaDraft | null>(null)
   const [savedMessage, setSavedMessage] = useState("")
@@ -4226,7 +5706,7 @@ function PaktaPage({
       })),
     )
   }
-  const school = schools.find((item) => item.name === selectedSchool)
+  const school = schoolList.find((item) => item.name === selectedSchool)
   const pks = pksSchools.find((item) => item.name === selectedSchool)
   const schoolSigner = schoolSignerView(signers, selectedSchool, {
     name: signer?.name ?? pks?.principal ?? "",
@@ -4337,9 +5817,13 @@ function PaktaPage({
         </div>
         <div className="no-print">
             <SignedDocumentUpload
+              canReview={canReview}
               documentLabel="Pakta Integritas"
               file={schoolUploads.pakta}
+              hasDraft
               onChange={changePaktaUpload}
+              reviewerName={reviewerName}
+              trackApproval
             />
         </div>
         <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
@@ -4494,26 +5978,21 @@ function PaktaPage({
           </div>
         </div>
         {mode === "admin" && (
-          <label className="block sm:w-80">
+          <div className="block sm:w-96">
             <span className="mb-2 block text-xs font-bold text-ink">
               Sekolah
             </span>
-            <select
-              aria-label="Pilih sekolah untuk pakta integritas"
-              className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-primary"
-              onChange={(event) => {
-                setSelectedSchool(event.target.value)
+            <SchoolSearchPicker
+              ariaLabel="Cari sekolah untuk pakta integritas"
+              onChange={(name) => {
+                setSelectedSchool(name)
                 setView("list")
+                setSavedMessage("")
               }}
+              source="affected"
               value={selectedSchool}
-            >
-              {schools.map((item) => (
-                <option key={item.name} value={item.name}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
+            />
+          </div>
         )}
       </div>
       {savedMessage && (
@@ -4521,14 +6000,23 @@ function PaktaPage({
           {savedMessage}
         </div>
       )}
+      {!selectedSchool ? (
+        <PickSchoolPrompt label="pakta integritas" />
+      ) : isSchoolkitBarangOnly(school) ? (
+        <div className="card px-6 py-16 text-center text-sm text-muted">
+          Sekolah ini hanya menerima Schoolkit barang, sehingga pakta integritas
+          tidak diperlukan.
+        </div>
+      ) : (
       <div className="card flex max-w-xl flex-col p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="text-xs font-semibold uppercase tracking-wider text-muted">
             Dokumen sekolah
           </div>
-          <StatusPill tone={draft ? "green" : "orange"}>
-            {draft ? "Draf tersimpan" : "Belum ada draf"}
-          </StatusPill>
+          <DocFlowStatusPill
+            file={schoolUploads.pakta}
+            hasDraft={Boolean(draft)}
+          />
         </div>
         <div className="mt-2 text-lg font-extrabold text-ink">
           Pakta Integritas
@@ -4569,12 +6057,17 @@ function PaktaPage({
           )}
         </div>
         <SignedDocumentUpload
+          canReview={canReview}
           documentLabel="Pakta Integritas"
           enabled={Boolean(draft)}
           file={schoolUploads.pakta}
+          hasDraft={Boolean(draft)}
           onChange={changePaktaUpload}
+          reviewerName={reviewerName}
+          trackApproval
         />
       </div>
+      )}
     </div>
   )
 }
@@ -4919,6 +6412,8 @@ function SptjmPage({
   templates = initialSptjmTemplates,
   docUploads = {},
   onChangeDocUploads,
+  canReview = false,
+  reviewerName = "",
 }: {
   mode: "admin" | "school"
   schoolName?: string
@@ -4933,11 +6428,15 @@ function SptjmPage({
   templates?: PaktaTemplate[]
   docUploads?: DocUploadsMap
   onChangeDocUploads?: (next: DocUploadsMap) => void
+  canReview?: boolean
+  reviewerName?: string
 }) {
-  const [selectedSchool, setSelectedSchool] = useState(
-    schoolName ?? schools[0].name,
+  const schoolList = useAffectedSchoolList()
+  const [selectedSchool, setSelectedSchool] = useState(schoolName ?? "")
+  const [drafts, setDrafts] = usePersistedState<Record<string, SptjmDraft>>(
+    "sptjmDrafts",
+    {},
   )
-  const [drafts, setDrafts] = useState<Record<string, SptjmDraft>>({})
   const [view, setView] = useState<"list" | "edit" | "preview">("list")
   const [editor, setEditor] = useState<SptjmDraft | null>(null)
   const [savedMessage, setSavedMessage] = useState("")
@@ -4950,7 +6449,7 @@ function SptjmPage({
       })),
     )
   }
-  const school = schools.find((item) => item.name === selectedSchool)
+  const school = schoolList.find((item) => item.name === selectedSchool)
   const pks = pksSchools.find((item) => item.name === selectedSchool)
   const yearDefault = "2026"
   const schoolSigner = schoolSignerView(signers, selectedSchool, {
@@ -5069,9 +6568,13 @@ function SptjmPage({
         </div>
         <div className="no-print">
             <SignedDocumentUpload
+              canReview={canReview}
               documentLabel="SPTJM"
               file={schoolUploads.sptjm}
+              hasDraft
               onChange={changeSptjmUpload}
+              reviewerName={reviewerName}
+              trackApproval
             />
         </div>
         <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
@@ -5224,26 +6727,21 @@ function SptjmPage({
           </div>
         </div>
         {mode === "admin" && (
-          <label className="block sm:w-80">
+          <div className="block sm:w-96">
             <span className="mb-2 block text-xs font-bold text-ink">
               Sekolah
             </span>
-            <select
-              aria-label="Pilih sekolah untuk SPTJM"
-              className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-primary"
-              onChange={(event) => {
-                setSelectedSchool(event.target.value)
+            <SchoolSearchPicker
+              ariaLabel="Cari sekolah untuk SPTJM"
+              onChange={(name) => {
+                setSelectedSchool(name)
                 setView("list")
+                setSavedMessage("")
               }}
+              source="affected"
               value={selectedSchool}
-            >
-              {schools.map((item) => (
-                <option key={item.name} value={item.name}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
+            />
+          </div>
         )}
       </div>
       {savedMessage && (
@@ -5251,14 +6749,23 @@ function SptjmPage({
           {savedMessage}
         </div>
       )}
+      {!selectedSchool ? (
+        <PickSchoolPrompt label="SPTJM" />
+      ) : isSchoolkitBarangOnly(school) ? (
+        <div className="card px-6 py-16 text-center text-sm text-muted">
+          Sekolah ini hanya menerima Schoolkit barang, sehingga SPTJM tidak
+          diperlukan.
+        </div>
+      ) : (
       <div className="card flex max-w-xl flex-col p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="text-xs font-semibold uppercase tracking-wider text-muted">
             Dokumen sekolah
           </div>
-          <StatusPill tone={draft ? "green" : "orange"}>
-            {draft ? "Draf tersimpan" : "Belum ada draf"}
-          </StatusPill>
+          <DocFlowStatusPill
+            file={schoolUploads.sptjm}
+            hasDraft={Boolean(draft)}
+          />
         </div>
         <div className="mt-2 text-lg font-extrabold text-ink">SPTJM</div>
         <div className="mt-1 text-xs text-muted">{selectedSchool}</div>
@@ -5293,12 +6800,17 @@ function SptjmPage({
           )}
         </div>
         <SignedDocumentUpload
+          canReview={canReview}
           documentLabel="SPTJM"
           enabled={Boolean(draft)}
           file={schoolUploads.sptjm}
+          hasDraft={Boolean(draft)}
           onChange={changeSptjmUpload}
+          reviewerName={reviewerName}
+          trackApproval
         />
       </div>
+      )}
     </div>
   )
 }
@@ -5306,16 +6818,35 @@ function SptjmPage({
 function assignedAidPackages(
   schoolName: string | undefined,
   availablePackages: Record<string, AidItem[]>,
+  schoolList: Pick<SchoolRecord, "name" | "packages">[] = schools,
 ) {
   if (!schoolName) return {}
   const assigned =
-    schools.find((item) => item.name === schoolName)?.packages ?? []
+    schoolList.find((item) => item.name === schoolName)?.packages ?? []
   return Object.fromEntries(
     assigned.map((name) => [
       name,
       (availablePackages[name] ?? []).map((item) => ({ ...item })),
     ]),
   )
+}
+
+function assignmentSchoolFromAffected(
+  school: SchoolRecord,
+  pksList: PksSchool[] = pksSchools,
+  masters: typeof masterSchools = masterSchools,
+) {
+  const pks = pksList.find((item) => item.name === school.name)
+  const master = masters.find((item) => item.name === school.name)
+  return {
+    name: school.name,
+    npsn: pks?.npsn || master?.npsn || "",
+    address:
+      pks?.address ||
+      [school.location, school.regency, school.province]
+        .filter(Boolean)
+        .join(", "),
+  }
 }
 
 function AidAssignmentPage({
@@ -5330,23 +6861,108 @@ function AidAssignmentPage({
   lockedSchoolNpsn?: string
 }) {
   const availablePackages = packages ?? initialAidPackages
+  const { data, loaded } = useDb()
+  const [schoolData, setSchoolData] = usePersistedState<SchoolRecord[]>(
+    "affectedSchools",
+    schools,
+  )
+  const affectedSchools =
+    (data.affectedSchools as SchoolRecord[] | undefined)?.length
+      ? (data.affectedSchools as SchoolRecord[])
+      : schoolData
   const [schoolNpsn, setSchoolNpsn] = useState(
     lockedSchoolNpsn || initialSchoolNpsn,
   )
   const schoolLocked = Boolean(lockedSchoolNpsn)
+  const schoolOptions = affectedSchools
+    .map((item) => assignmentSchoolFromAffected(item))
+    .filter((item) => item.npsn)
+  const visibleSchoolOptions = schoolLocked
+    ? schoolOptions.filter((item) => item.npsn === lockedSchoolNpsn)
+    : schoolOptions
+  const school = visibleSchoolOptions.find((item) => item.npsn === schoolNpsn)
   const [selectedPackages, setSelectedPackages] = useState<
     Record<string, AidItem[]>
   >(() => {
-    if (!lockedSchoolNpsn) return {}
-    const lockedSchool = pksSchools.find(
-      (item) => item.npsn === lockedSchoolNpsn,
-    )
-    return assignedAidPackages(lockedSchool?.name, availablePackages)
+    const npsn = lockedSchoolNpsn || initialSchoolNpsn
+    if (!npsn) return {}
+    const selectedSchool =
+      schools
+        .map((item) => assignmentSchoolFromAffected(item))
+        .find((item) => item.npsn === npsn) ??
+      pksSchools.find((item) => item.npsn === npsn)
+    return assignedAidPackages(selectedSchool?.name, availablePackages)
   })
   const [detailPackage, setDetailPackage] = useState<string | null>(null)
+  const [schoolkitKategori, setSchoolkitKategori] = useState<
+    "" | SchoolkitKategori
+  >("")
   const [saved, setSaved] = useState(false)
-  const school = pksSchools.find((item) => item.npsn === schoolNpsn)
+  const [saveMode, setSaveMode] = useState<"add" | "edit" | null>(null)
+  const existingPackages =
+    affectedSchools.find((item) => item.name === school?.name)?.packages ?? []
+  const isEdit = existingPackages.length > 0
   const selectedPackageNames = Object.keys(selectedPackages)
+
+  useEffect(() => {
+    if (!loaded) return
+    if (!schoolNpsn) {
+      setSelectedPackages({})
+      setSchoolkitKategori("")
+      setDetailPackage(null)
+      setSaved(false)
+      setSaveMode(null)
+      return
+    }
+    const selectedSchool =
+      schoolOptions.find((item) => item.npsn === schoolNpsn) ??
+      pksSchools.find((item) => item.npsn === schoolNpsn)
+    setSelectedPackages(
+      assignedAidPackages(
+        selectedSchool?.name,
+        availablePackages,
+        affectedSchools,
+      ),
+    )
+    const affected = affectedSchools.find(
+      (item) => item.name === selectedSchool?.name,
+    )
+    setSchoolkitKategori(
+      affected?.packages?.includes("Schoolkit")
+        ? (affected.schoolkitKategori ?? "")
+        : "",
+    )
+    setDetailPackage(null)
+    setSaved(false)
+    setSaveMode(null)
+  }, [loaded, schoolNpsn])
+
+  const saveAssignment = () => {
+    if (!school || schoolLocked) return
+    const names = Object.keys(selectedPackages) as AidMenuName[]
+    if (names.includes("Schoolkit") && !schoolkitKategori) return
+    const kategori: SchoolkitKategori | undefined = names.includes("Schoolkit")
+      ? schoolkitKategori === "barang"
+        ? "barang"
+        : "uang"
+      : undefined
+    setSchoolData((current) => {
+      const next = current.map((item) =>
+        item.name === school.name
+          ? ({
+              ...item,
+              packages: names,
+              menuCount: names.length,
+              schoolkitKategori: kategori,
+            } as SchoolRecord)
+          : item,
+      )
+      syncAffectedSchools(next)
+      return next
+    })
+    setSaveMode(isEdit ? "edit" : "add")
+    setSaved(true)
+  }
   const detailItems = detailPackage
     ? (selectedPackages[detailPackage] ?? [])
     : []
@@ -5358,6 +6974,9 @@ function AidAssignmentPage({
   )
 
   const togglePackage = (name: string) => {
+    if (name === "Schoolkit" && selectedPackages.Schoolkit) {
+      setSchoolkitKategori("")
+    }
     setSelectedPackages((current) => {
       const next = { ...current }
       if (next[name]) {
@@ -5488,16 +7107,10 @@ function AidAssignmentPage({
               value={schoolNpsn}
               onChange={(event) => {
                 setSchoolNpsn(event.target.value)
-                setSelectedPackages({})
-                setDetailPackage(null)
-                setSaved(false)
               }}
             >
               <option value="">Pilih sekolah terdampak...</option>
-              {(schoolLocked
-                ? pksSchools.filter((item) => item.npsn === lockedSchoolNpsn)
-                : pksSchools
-              ).map((item) => (
+              {visibleSchoolOptions.map((item) => (
                 <option key={item.npsn} value={item.npsn}>
                   {item.name} — NPSN {item.npsn}
                 </option>
@@ -5539,45 +7152,70 @@ function AidAssignmentPage({
               {Object.keys(availablePackages).map((name) => (
                 <div
                   key={name}
-                  className={`flex flex-col gap-3 rounded-2xl border p-4 transition-colors sm:flex-row sm:items-center ${
+                  className={`rounded-2xl border p-4 transition-colors ${
                     selectedPackages[name]
                       ? "border-primary bg-blue-soft/40"
                       : "border-border bg-white"
                   } ${!school || (schoolLocked && !selectedPackages[name]) ? "pointer-events-none opacity-45" : ""}`}
                 >
-                  <Button
-                    className="flex-1 justify-start gap-3 text-left"
-                    onClick={() => {
-                      if (schoolLocked) return
-                      togglePackage(name)
-                    }}
-                    disabled={!school || schoolLocked}
-                  >
-                    <span
-                      className={`grid size-5 shrink-0 place-items-center rounded-md border ${
-                        selectedPackages[name]
-                          ? "border-primary bg-primary text-white"
-                          : "border-muted-light"
-                      }`}
-                    >
-                      {selectedPackages[name] && "✓"}
-                    </span>
-                    <span>
-                      <span className="block text-xs font-bold text-ink">
-                        {name}
-                      </span>
-                      <span className="mt-1 block text-[0.65rem] text-muted">
-                        {availablePackages[name]?.length ?? 0} barang standar
-                      </span>
-                    </span>
-                  </Button>
-                  {selectedPackages[name] && (
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                     <Button
-                      className="gap-2 border border-primary px-3 py-2 text-xs font-bold text-primary hover:bg-white"
-                      onClick={() => setDetailPackage(name)}
+                      className="flex-1 justify-start gap-3 text-left"
+                      onClick={() => {
+                        if (schoolLocked) return
+                        togglePackage(name)
+                      }}
+                      disabled={!school || schoolLocked}
                     >
-                      <Icon name="eye" className="size-4" /> Detail Paket
+                      <span
+                        className={`grid size-5 shrink-0 place-items-center rounded-md border ${
+                          selectedPackages[name]
+                            ? "border-primary bg-primary text-white"
+                            : "border-muted-light"
+                        }`}
+                      >
+                        {selectedPackages[name] && "✓"}
+                      </span>
+                      <span>
+                        <span className="block text-xs font-bold text-ink">
+                          {name}
+                        </span>
+                        <span className="mt-1 block text-[0.65rem] text-muted">
+                          {availablePackages[name]?.length ?? 0} barang standar
+                        </span>
+                      </span>
                     </Button>
+                    {selectedPackages[name] && (
+                      <Button
+                        className="gap-2 border border-primary px-3 py-2 text-xs font-bold text-primary hover:bg-white"
+                        onClick={() => setDetailPackage(name)}
+                      >
+                        <Icon name="eye" className="size-4" /> Detail Paket
+                      </Button>
+                    )}
+                  </div>
+                  {name === "Schoolkit" && selectedPackages.Schoolkit && (
+                    <label className="mt-4 block border-t border-primary/15 pt-4">
+                      <span className="mb-2 block text-xs font-bold text-ink">
+                        Kategori Schoolkit
+                      </span>
+                      <select
+                        aria-label="Kategori Schoolkit"
+                        className="w-full rounded-xl border border-border bg-white px-4 py-3.5 text-sm text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 disabled:bg-surface disabled:text-muted"
+                        disabled={schoolLocked}
+                        onChange={(event) => {
+                          setSchoolkitKategori(
+                            event.target.value as "" | SchoolkitKategori,
+                          )
+                          setSaved(false)
+                        }}
+                        value={schoolkitKategori}
+                      >
+                        <option value="">Pilih kategori...</option>
+                        <option value="uang">Uang</option>
+                        <option value="barang">Barang</option>
+                      </select>
+                    </label>
                   )}
                 </div>
               ))}
@@ -5614,6 +7252,11 @@ function AidAssignmentPage({
                     >
                       <span className="size-1.5 rounded-full bg-primary" />
                       <span className="font-semibold">{name}</span>
+                      {name === "Schoolkit" && schoolkitKategori && (
+                        <span className="ml-auto font-bold text-primary">
+                          {schoolkitKategori === "barang" ? "Barang" : "Uang"}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -5640,16 +7283,24 @@ function AidAssignmentPage({
                 </div>
               </div>
             </div>
-            <Button
-              className="mt-5 w-full bg-primary py-3.5 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!school || !selectedPackageNames.length}
-              onClick={() => setSaved(true)}
-            >
-              Simpan Penetapan
-            </Button>
+            {!schoolLocked && (
+              <Button
+                className="mt-5 w-full bg-primary py-3.5 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={
+                  !school ||
+                  !selectedPackageNames.length ||
+                  (Boolean(selectedPackages.Schoolkit) && !schoolkitKategori)
+                }
+                onClick={saveAssignment}
+              >
+                {isEdit ? "Simpan Perubahan" : "Simpan Penetapan"}
+              </Button>
+            )}
             {saved && (
               <div className="mt-3 rounded-xl bg-green-soft px-4 py-3 text-center text-xs font-bold text-success">
-                Penetapan bantuan berhasil disimpan.
+                {saveMode === "edit"
+                  ? "Penetapan bantuan berhasil diperbarui."
+                  : "Penetapan bantuan berhasil ditambahkan."}
               </div>
             )}
           </div>
@@ -5788,6 +7439,7 @@ function MasterPackagePage({
   onChange: (packages: Record<string, AidItem[]>) => void
   onAssign: () => void
 }) {
+  const { data } = useDb()
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingName, setEditingName] = useState<string | null>(null)
   const [draftName, setDraftName] = useState("")
@@ -5855,6 +7507,27 @@ function MasterPackagePage({
     next[draftName.trim()] = draftItems
     onChange(next)
     setEditorOpen(false)
+  }
+
+  const deletePackage = (name: string) => {
+    const affected =
+      (data.affectedSchools as SchoolRecord[] | undefined) ?? schools
+    if (affected.some((school) => (school.packages as string[]).includes(name))) {
+      window.alert(
+        "Menu masih ditetapkan ke sekolah terdampak. Ubah penetapan bantuan dulu.",
+      )
+      return
+    }
+    if (
+      !window.confirm(
+        `Hapus menu ${name}? Tindakan ini tidak dapat dibatalkan.`,
+      )
+    ) {
+      return
+    }
+    const next = { ...packages }
+    delete next[name]
+    onChange(next)
   }
 
   return (
@@ -5942,6 +7615,12 @@ function MasterPackagePage({
                   onClick={onAssign}
                 >
                   Tetapkan <Icon name="arrow" className="size-4" />
+                </Button>
+                <Button
+                  className="col-span-2 gap-2 py-2.5 text-xs font-bold text-danger hover:bg-red-soft"
+                  onClick={() => deletePackage(name)}
+                >
+                  Hapus
                 </Button>
               </div>
             </div>
@@ -6143,7 +7822,7 @@ function PksDocument({
         <img
           alt="Logo Kementerian Pendidikan Dasar dan Menengah"
           className="mx-auto h-14 w-auto max-w-full object-contain sm:h-16"
-          src={`${import.meta.env.BASE_URL}logo-kemendikdasmen.png`}
+          src="/logo-kemendikdasmen.png"
         />
       ) : null}
       <div className={`${showKop ? "mt-3" : ""} py-2 text-center`}>
@@ -6299,6 +7978,22 @@ function PksDocument({
   )
 }
 
+function PickSchoolPrompt({ label }: { label: string }) {
+  return (
+    <div className="card px-6 py-16 text-center">
+      <div className="mx-auto grid size-14 place-items-center rounded-3xl bg-blue-soft text-primary">
+        <Icon name="search" className="size-6" />
+      </div>
+      <div className="mt-4 text-sm font-bold text-ink">
+        Cari sekolah terlebih dahulu
+      </div>
+      <div className="mt-2 text-sm text-muted">
+        Ketik nama sekolah atau NPSN di kolom pencarian untuk membuka {label}.
+      </div>
+    </div>
+  )
+}
+
 function schoolSignerPlace(schoolName: string) {
   return (
     schools.find((item) => item.name === schoolName)?.regency ||
@@ -6313,13 +8008,18 @@ function PksPage({
   schoolName,
   docUploads = {},
   onChangeDocUploads,
+  canReview = false,
+  reviewerName = "",
 }: {
   signers?: SignerRecord[]
   mode?: "admin" | "school"
   schoolName?: string
   docUploads?: DocUploadsMap
   onChangeDocUploads?: (next: DocUploadsMap) => void
+  canReview?: boolean
+  reviewerName?: string
 }) {
+  const schoolList = useAffectedSchoolList()
   const lockedSchool =
     mode === "school"
       ? (pksSchools.find((item) => item.name === schoolName) ?? pksSchools[0])
@@ -6329,7 +8029,9 @@ function PksPage({
   const [selected, setSelected] = useState<PksSchool | null>(lockedSchool)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [useKop, setUseKop] = useState(true)
-  const [drafts, setDrafts] = useState<Record<string, { useKop: boolean }>>({})
+  const [drafts, setDrafts] = usePersistedState<
+    Record<string, { useKop: boolean }>
+  >("pksDrafts", {})
   const [savedMessage, setSavedMessage] = useState("")
   const school = lockedSchool ?? (role === "school" ? pksSchools[0] : selected)
   const schoolSigner = school
@@ -6343,11 +8045,12 @@ function PksPage({
       .includes(query.toLowerCase()),
   )
   const pksPrereq = school
-    ? pksPrerequisiteItems(school.name, docUploads)
+    ? pksPrerequisiteItems(school.name, docUploads, schoolList)
     : { items: [], allReady: false }
   const schoolUploads = school
     ? schoolDocUploads(docUploads, school.name)
     : emptySchoolUploads()
+  const hasPksDraft = Boolean(school && drafts[school.name])
 
   const chooseSchool = (item: PksSchool) => {
     setSelected(item)
@@ -6430,7 +8133,6 @@ function PksPage({
           </div>
         )}
       </div>
-
       {role === "admin" && !selected && (
         <div className="card p-6 md:p-8">
           <div className="mx-auto max-w-2xl text-center">
@@ -6557,11 +8259,17 @@ function PksPage({
                 Status unggah dokumen pendukung
               </div>
               <div className="mt-1 text-[0.65rem] leading-5 text-muted">
-                Unggah PKS aktif setelah RAB, pakta integritas, kwitansi, dan
-                SPTJM sudah diunggah.
+                {pksPrereq.items.length === 0
+                  ? "Sekolah hanya menerima Schoolkit barang. Unggah PKS dapat dilakukan setelah draf disimpan."
+                  : "Unggah PKS aktif setelah dokumen uang yang diwajibkan sudah diunggah. Bagian Schoolkit barang tidak menjadi syarat."}
               </div>
               <div className="mt-3 space-y-2">
-                {pksPrereq.items.map((item) => (
+                {pksPrereq.items.length === 0 ? (
+                  <div className="rounded-xl bg-white px-3 py-2.5 text-xs text-muted">
+                    Tidak ada syarat unggah.
+                  </div>
+                ) : (
+                  pksPrereq.items.map((item) => (
                   <div
                     className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2.5"
                     key={item.label}
@@ -6578,14 +8286,21 @@ function PksPage({
                       {item.done ? "Sudah unggah" : "Belum unggah"}
                     </StatusPill>
                   </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
             <SignedDocumentUpload
-              disabledHint="Unggah RAB, pakta integritas, kwitansi, dan SPTJM terlebih dahulu."
+              canReview={canReview}
+              disabledHint={
+                hasPksDraft
+                  ? "Unggah dokumen uang yang masih diwajibkan terlebih dahulu."
+                  : "Simpan draf terlebih dahulu. Unggah aktif setelah draf tersimpan dan dokumen pendukung lengkap."
+              }
               documentLabel="PKS"
-              enabled={pksPrereq.allReady}
+              enabled={hasPksDraft && pksPrereq.allReady}
               file={schoolUploads.pks}
+              hasDraft={hasPksDraft}
               onChange={(next) =>
                 onChangeDocUploads?.(
                   patchSchoolUploads(docUploads, school.name, (current) => ({
@@ -6594,15 +8309,23 @@ function PksPage({
                   })),
                 )
               }
+              reviewerName={reviewerName}
+              trackApproval
               waitingLabel="Menunggu dokumen"
             />
           </div>
 
           <div className="card overflow-hidden">
             <div className="flex flex-col gap-3 border-b border-border bg-surface px-5 py-3.5 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <div className="text-xs font-bold text-ink">Draft PKS</div>
-                <div className="text-[0.65rem] text-muted">{school.number}</div>
+              <div className="flex items-center gap-3">
+                <div>
+                  <div className="text-xs font-bold text-ink">Draft PKS</div>
+                  <div className="text-[0.65rem] text-muted">{school.number}</div>
+                </div>
+                <DocFlowStatusPill
+                  file={schoolUploads.pks}
+                  hasDraft={hasPksDraft}
+                />
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="flex items-center gap-2 rounded-xl border border-border bg-white px-3 py-1.5">
@@ -6755,15 +8478,24 @@ function downloadPortalPdf(title: string, details: string[]) {
 function PortalLogin({
   onLogin,
 }: {
-  onLogin: (role: "admin" | "school") => void
+  onLogin: (role: PortalRole) => void
 }) {
-  const [role, setRole] = useState<"admin" | "school">("admin")
+  const accounts: { role: PortalRole; label: string; identity: string }[] = [
+    { role: "admin", label: "Administrator", identity: "admin.spab" },
+    { role: "dinas", label: "Dinas", identity: "dinas.spab" },
+    { role: "direktorat", label: "Direktorat", identity: "direktorat.spab" },
+    { role: "school", label: "Sekolah", identity: "20204182" },
+  ]
+  const [role, setRole] = useState<PortalRole>("admin")
   const [identity, setIdentity] = useState("admin.spab")
   const [password, setPassword] = useState("spab2025")
   const [showPassword, setShowPassword] = useState(false)
-  const changeRole = (nextRole: "admin" | "school") => {
+  const account = accounts.find((item) => item.role === role) ?? accounts[0]
+  const changeRole = (nextRole: PortalRole) => {
     setRole(nextRole)
-    setIdentity(nextRole === "admin" ? "admin.spab" : "20204182")
+    setIdentity(
+      accounts.find((item) => item.role === nextRole)?.identity ?? "",
+    )
   }
 
   return (
@@ -6829,22 +8561,19 @@ function PortalLogin({
           <div className="mt-2 text-sm leading-6 text-muted">
             Pilih peran, lalu masuk menggunakan akun yang sesuai.
           </div>
-          <div className="mt-7 grid grid-cols-2 rounded-xl bg-surface p-1">
-            {[
-              ["admin", "Administrator"],
-              ["school", "Sekolah"],
-            ].map(([value, label]) => (
+          <div className="mt-7 grid grid-cols-2 gap-1 rounded-xl bg-surface p-1">
+            {accounts.map((item) => (
               <Button
                 className={`px-4 py-2.5 text-xs font-bold ${
-                  role === value
+                  role === item.role
                     ? "bg-white text-primary shadow-sm"
                     : "text-muted hover:text-ink"
                 }`}
-                key={value}
-                onClick={() => changeRole(value as "admin" | "school")}
+                key={item.role}
+                onClick={() => changeRole(item.role)}
                 type="button"
               >
-                {label}
+                {item.label}
               </Button>
             ))}
           </div>
@@ -6857,20 +8586,20 @@ function PortalLogin({
           >
             <label className="block">
               <span className="mb-2 block text-xs font-bold text-ink">
-                {role === "admin" ? "Nama pengguna" : "NPSN"}
+                {role === "school" ? "NPSN" : "Nama pengguna"}
               </span>
               <div className="flex items-center gap-3 rounded-xl border border-border bg-white px-4 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10">
                 <Icon
-                  name={role === "admin" ? "user" : "building"}
+                  name={role === "school" ? "building" : "user"}
                   className="size-5 text-muted"
                 />
                 <input
                   className="w-full bg-transparent py-3.5 text-sm text-ink outline-none"
                   onChange={(event) => setIdentity(event.target.value)}
                   placeholder={
-                    role === "admin"
-                      ? "Masukkan nama pengguna"
-                      : "Masukkan 8 digit NPSN"
+                    role === "school"
+                      ? "Masukkan 8 digit NPSN"
+                      : "Masukkan nama pengguna"
                   }
                   required
                   value={identity}
@@ -6901,14 +8630,15 @@ function PortalLogin({
               </div>
             </label>
             <div className="rounded-xl bg-blue-soft px-4 py-3 text-xs leading-5 text-primary">
-              Akun demo {role === "admin" ? "administrator" : "sekolah"} sudah
-              terisi. Klik masuk untuk melanjutkan.
+              Akun demo {account.label.toLowerCase()} sudah terisi. User dinas,
+              direktorat, dan admin dapat menyetujui dokumen yang berstatus
+              menunggu persetujuan.
             </div>
             <Button
               className="w-full gap-2 bg-primary px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary-dark"
               type="submit"
             >
-              Masuk sebagai {role === "admin" ? "Administrator" : "Sekolah"}{" "}
+              Masuk sebagai {account.label}{" "}
               <Icon name="arrow" className="size-4" />
             </Button>
           </form>
@@ -7006,8 +8736,13 @@ function SchoolPortal({
         signers={signers}
         templates={sptjmTemplates}
       />
-    ) : active === "Bukti Penerimaan" ? (
-      <ReceiptPage schoolName={schoolName} />
+    ) : active === "Pelaporan/LPJ" ? (
+      <PelaporanLpjPage
+        docUploads={docUploads}
+        mode="school"
+        onChangeDocUploads={onChangeDocUploads}
+        schoolName={schoolName}
+      />
     ) : active === "PKS" ? (
       <PksPage
         docUploads={docUploads}
@@ -7055,12 +8790,18 @@ function MasterDataPage({
   description,
   columns,
   rows,
+  idKey,
+  onChange,
+  relatedMessage,
   categoryFilter,
 }: {
   title: string
   description: string
   columns: { key: string; label: string }[]
   rows: Record<string, string | number>[]
+  idKey: string
+  onChange?: (rows: Record<string, string | number>[]) => void
+  relatedMessage?: (row: Record<string, string | number>) => string | null
   categoryFilter?: {
     key: string
     label: string
@@ -7069,6 +8810,12 @@ function MasterDataPage({
 }) {
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState("")
+  const [formOpen, setFormOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const emptyDraft = Object.fromEntries(
+    columns.map((column) => [column.key, column.key === "status" ? "Aktif" : ""]),
+  ) as Record<string, string | number>
+  const [draft, setDraft] = useState(emptyDraft)
   const filtered = rows.filter((row) => {
     if (
       categoryFilter &&
@@ -7083,6 +8830,47 @@ function MasterDataPage({
       .includes(query.toLowerCase())
   })
 
+  const openAdd = () => {
+    setEditingId(null)
+    setDraft({ ...emptyDraft })
+    setFormOpen(true)
+  }
+
+  const openEdit = (row: Record<string, string | number>) => {
+    setEditingId(String(row[idKey]))
+    setDraft({ ...row })
+    setFormOpen(true)
+  }
+
+  const saveRow = () => {
+    if (!String(draft[idKey] ?? "").trim()) return
+    const payload = { ...draft, [idKey]: String(draft[idKey]).trim() }
+    const duplicate = rows.some(
+      (row) => String(row[idKey]) === String(payload[idKey]) && String(row[idKey]) !== editingId,
+    )
+    if (duplicate) {
+      window.alert("Kode/ID sudah digunakan.")
+      return
+    }
+    const next = editingId
+      ? rows.map((row) => (String(row[idKey]) === editingId ? payload : row))
+      : [payload, ...rows]
+    onChange?.(next)
+    setFormOpen(false)
+  }
+
+  const deleteRow = (row: Record<string, string | number>) => {
+    const related = relatedMessage?.(row)
+    if (related) {
+      window.alert(related)
+      return
+    }
+    if (!window.confirm(`Hapus ${row[idKey]}? Tindakan ini tidak dapat dibatalkan.`)) {
+      return
+    }
+    onChange?.(rows.filter((item) => String(item[idKey]) !== String(row[idKey])))
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -7090,7 +8878,10 @@ function MasterDataPage({
           <div className="text-2xl font-extrabold text-ink">{title}</div>
           <div className="mt-1 text-sm text-muted">{description}</div>
         </div>
-        <Button className="gap-2 bg-primary px-5 py-3 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary-dark">
+        <Button
+          className="gap-2 bg-primary px-5 py-3 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary-dark"
+          onClick={openAdd}
+        >
           <span className="text-lg leading-none">+</span> Tambah Data
         </Button>
       </div>
@@ -7138,6 +8929,7 @@ function MasterDataPage({
                     {column.label}
                   </th>
                 ))}
+                <th className="px-5 py-3.5">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -7168,13 +8960,29 @@ function MasterDataPage({
                       </td>
                     )
                   })}
+                  <td className="px-5 py-4">
+                    <div className="flex items-center gap-1 whitespace-nowrap">
+                      <Button
+                        className="px-2.5 py-2 text-xs font-bold text-primary hover:bg-blue-soft"
+                        onClick={() => openEdit(row)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        className="px-2.5 py-2 text-xs font-bold text-danger hover:bg-red-soft"
+                        onClick={() => deleteRow(row)}
+                      >
+                        Hapus
+                      </Button>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
                   <td
                     className="px-5 py-16 text-center text-sm text-muted"
-                    colSpan={columns.length}
+                    colSpan={columns.length + 1}
                   >
                     Data tidak ditemukan.
                   </td>
@@ -7184,6 +8992,57 @@ function MasterDataPage({
           </table>
         </div>
       </div>
+      {formOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-ink/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border px-6 py-5">
+              <div className="text-base font-bold text-ink">
+                {editingId ? "Edit Data" : "Tambah Data"}
+              </div>
+              <Button
+                aria-label="Tutup formulir"
+                className="p-2 text-muted hover:bg-surface"
+                onClick={() => setFormOpen(false)}
+              >
+                <Icon name="close" />
+              </Button>
+            </div>
+            <div className="grid gap-4 p-6 sm:grid-cols-2">
+              {columns.map((column) => (
+                <label className="block" key={column.key}>
+                  <span className="mb-2 block text-xs font-bold text-ink">
+                    {column.label}
+                  </span>
+                  <input
+                    className="w-full rounded-xl border border-border px-4 py-3 text-sm outline-none focus:border-primary"
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        [column.key]: event.target.value,
+                      }))
+                    }
+                    value={String(draft[column.key] ?? "")}
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="flex justify-end gap-3 border-t border-border bg-surface p-4">
+              <Button
+                className="border border-border px-5 py-3 text-xs font-bold text-ink hover:bg-white"
+                onClick={() => setFormOpen(false)}
+              >
+                Batal
+              </Button>
+              <Button
+                className="bg-primary px-5 py-3 text-xs font-bold text-white hover:bg-primary-dark"
+                onClick={saveRow}
+              >
+                Simpan
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -7202,7 +9061,11 @@ function MasterGoodsPage() {
     category: "Schoolkit",
     price: 0,
   }
-  const [items, setItems] = useState<MasterGood[]>(masterGoods)
+  const { data } = useDb()
+  const [items, setItems] = usePersistedState<MasterGood[]>(
+    "goods",
+    masterGoods,
+  )
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState("")
   const [formOpen, setFormOpen] = useState(false)
@@ -7254,6 +9117,16 @@ function MasterGoodsPage() {
   }
 
   const deleteItem = (item: MasterGood) => {
+    const menus = (data.menus ?? {}) as Record<string, { name: string }[]>
+    const usedIn = Object.entries(menus).find(([, rows]) =>
+      rows.some((row) => row.name === item.name),
+    )
+    if (usedIn) {
+      window.alert(
+        `Barang masih dipakai di master menu ${usedIn[0]}. Ubah paket bantuan dulu.`,
+      )
+      return
+    }
     if (
       window.confirm(
         `Hapus ${item.name}? Tindakan ini tidak dapat dibatalkan.`,
@@ -7572,9 +9445,21 @@ function ModulePage({ name }: { name: string }) {
         icon: "receipt",
         description: "Catat dan verifikasi kwitansi penyaluran dana bantuan.",
       },
-      Realisasi: {
-        icon: "file",
-        description: "Pantau realisasi anggaran dan pelaksanaan bantuan.",
+      RKAS: {
+        icon: "money",
+        description: "Kelola Rencana Kegiatan dan Anggaran Sekolah.",
+      },
+      Invoice: {
+        icon: "receipt",
+        description: "Kelola invoice pengadaan bantuan SPAB.",
+      },
+      BAST: {
+        icon: "handshake",
+        description: "Kelola berita acara serah terima bantuan.",
+      },
+      "Dokumentasi Hasil": {
+        icon: "document",
+        description: "Kelola foto dan berkas hasil pelaksanaan bantuan.",
       },
     }
     return (
@@ -7618,13 +9503,33 @@ function ModulePage({ name }: { name: string }) {
 function SchoolSearchPicker({
   value,
   onChange,
+  source = "master",
+  ariaLabel = "Cari sekolah",
 }: {
   value: string
   onChange: (schoolName: string) => void
+  source?: "master" | "affected"
+  ariaLabel?: string
 }) {
+  const { data } = useDb()
+  const catalog =
+    source === "affected"
+      ? ((data.affectedSchools as SchoolRecord[] | undefined)?.length
+          ? (data.affectedSchools as SchoolRecord[])
+          : schools
+        ).map((item) => {
+          const lookup = assignmentSchoolFromAffected(item)
+          return {
+            name: item.name,
+            npsn: lookup.npsn || "-",
+            regency: item.regency,
+            province: item.province,
+          }
+        })
+      : masterSchools
   const [query, setQuery] = useState("")
   const selected =
-    masterSchools.find((item) => item.name === value) ??
+    catalog.find((item) => item.name === value) ??
     (value
       ? {
           name: value,
@@ -7637,7 +9542,7 @@ function SchoolSearchPicker({
   const results =
     normalized.length < 2
       ? []
-      : masterSchools
+      : catalog
           .filter((item) =>
             `${item.name} ${item.npsn} ${item.regency} ${item.province}`
               .toLowerCase()
@@ -7673,7 +9578,7 @@ function SchoolSearchPicker({
       <label className="flex items-center gap-3 rounded-xl border border-border bg-white px-4 py-3 text-muted focus-within:border-primary">
         <Icon name="search" className="size-4 shrink-0" />
         <input
-          aria-label="Cari sekolah"
+          aria-label={ariaLabel}
           className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-muted-light"
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Ketik minimal 2 huruf: nama sekolah atau NPSN"
@@ -8149,21 +10054,51 @@ function SignerSettingsPage({
 export default function App() {
   const [active, setActive] = useState("Dashboard")
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [appMode, setAppMode] = useState<"login" | "admin" | "school">("login")
+  const [appMode, setAppMode] = useState<"login" | PortalRole>("login")
   const [assignmentSchoolNpsn, setAssignmentSchoolNpsn] = useState("")
-  const [packages, setPackages] =
-    useState<Record<string, AidItem[]>>(initialAidPackages)
-  const [signers, setSigners] = useState<SignerRecord[]>(initialSigners)
-  const [paktaTemplates, setPaktaTemplates] =
-    useState<PaktaTemplate[]>(initialPaktaTemplates)
-  const [sptjmTemplates, setSptjmTemplates] =
-    useState<PaktaTemplate[]>(initialSptjmTemplates)
-  const [docUploads, setDocUploads] = useState<DocUploadsMap>({})
+  const [packages, setPackages] = usePersistedState<Record<string, AidItem[]>>(
+    "menus",
+    initialAidPackages,
+  )
+  const [signers, setSigners] = usePersistedState<SignerRecord[]>(
+    "signers",
+    initialSigners,
+  )
+  const [paktaTemplates, setPaktaTemplates] = usePersistedState<PaktaTemplate[]>(
+    "paktaTemplates",
+    initialPaktaTemplates,
+  )
+  const [sptjmTemplates, setSptjmTemplates] = usePersistedState<PaktaTemplate[]>(
+    "sptjmTemplates",
+    initialSptjmTemplates,
+  )
+  const [docUploads, setDocUploads] = usePersistedState<DocUploadsMap>(
+    "docUploads",
+    {},
+  )
+  const [masterSchoolRows, setMasterSchoolRows] = usePersistedState(
+    "schools",
+    masterSchools,
+  )
+  const [masterRegionRows, setMasterRegionRows] = usePersistedState(
+    "regions",
+    masterRegions,
+  )
+  const [masterDisasterRows, setMasterDisasterRows] = usePersistedState(
+    "disasters",
+    masterDisasters,
+  )
+  const { data } = useDb()
+  useEffect(() => {
+    const rows = data.pksSchools as PksSchool[] | undefined
+    if (!rows?.length) return
+    pksSchools.splice(0, pksSchools.length, ...rows)
+  }, [data.pksSchools])
 
   if (appMode === "login") {
     return (
       <PortalLogin
-        onLogin={(role) => setAppMode(role === "admin" ? "admin" : "school")}
+        onLogin={(role) => setAppMode(role)}
       />
     )
   }
@@ -8183,6 +10118,19 @@ export default function App() {
     )
   }
 
+  const reviewerName =
+    appMode === "dinas"
+      ? "User Dinas"
+      : appMode === "direktorat"
+        ? "User Direktorat"
+        : "User Admin"
+  const reviewerRole =
+    appMode === "dinas"
+      ? "Dinas"
+      : appMode === "direktorat"
+        ? "Direktorat"
+        : "Administrator"
+
   const content =
     active === "Dashboard" ? (
       <Dashboard onNavigate={setActive} />
@@ -8190,7 +10138,10 @@ export default function App() {
       <SchoolTable
         onAssign={(school) => {
           setAssignmentSchoolNpsn(
-            pksSchools.find((item) => item.name === school.name)?.npsn ?? "",
+            pksSchools.find((item) => item.name === school.name)?.npsn ??
+              masterSchoolRows.find((item) => item.name === school.name)
+                ?.npsn ??
+              "",
           )
           setActive("Penetapan Bantuan")
         }}
@@ -8213,7 +10164,15 @@ export default function App() {
           { key: "status", label: "Status" },
         ]}
         description="Data referensi satuan pendidikan jenjang SMP."
-        rows={masterSchools}
+        idKey="npsn"
+        onChange={setMasterSchoolRows}
+        relatedMessage={(row) =>
+          schools.some((item) => item.name === row.name) ||
+          pksSchools.some((item) => item.name === row.name || item.npsn === row.npsn)
+            ? "Sekolah masih dipakai di data sekolah terdampak atau PKS. Hapus relasi itu dulu."
+            : null
+        }
+        rows={masterSchoolRows}
         title="Master Sekolah"
       />
     ) : active === "Master Wilayah" ? (
@@ -8225,7 +10184,17 @@ export default function App() {
           { key: "parent", label: "Induk" },
         ]}
         description="Referensi provinsi, kabupaten/kota, dan kecamatan."
-        rows={masterRegions}
+        idKey="code"
+        onChange={setMasterRegionRows}
+        relatedMessage={(row) =>
+          schools.some(
+            (item) =>
+              item.province === row.name || item.regency === row.name,
+          )
+            ? "Wilayah masih dipakai sekolah terdampak. Ubah data sekolah dulu."
+            : null
+        }
+        rows={masterRegionRows}
         title="Master Wilayah"
       />
     ) : active === "Master Jenis Bencana" ? (
@@ -8237,7 +10206,14 @@ export default function App() {
           { key: "status", label: "Status" },
         ]}
         description="Klasifikasi jenis bencana untuk pelaporan sekolah terdampak."
-        rows={masterDisasters}
+        idKey="code"
+        onChange={setMasterDisasterRows}
+        relatedMessage={(row) =>
+          schools.some((item) => item.disaster === row.name)
+            ? "Jenis bencana masih dipakai sekolah terdampak. Ubah data sekolah dulu."
+            : null
+        }
+        rows={masterDisasterRows}
         title="Master Jenis Bencana"
       />
     ) : active === "Master Barang" ? (
@@ -8270,42 +10246,56 @@ export default function App() {
       />
     ) : active === "RAB" ? (
       <RabPage
+        canReview
         docUploads={docUploads}
         mode="admin"
         onChangeDocUploads={setDocUploads}
         packages={packages}
+        reviewerName={reviewerName}
         signers={signers}
       />
     ) : active === "Pakta Integritas" ? (
       <PaktaPage
+        canReview
         docUploads={docUploads}
         mode="admin"
         onChangeDocUploads={setDocUploads}
+        reviewerName={reviewerName}
         signers={signers}
         templates={paktaTemplates}
       />
     ) : active === "Kwitansi" ? (
       <KwitansiPage
+        canReview
         docUploads={docUploads}
         mode="admin"
         onChangeDocUploads={setDocUploads}
         packages={packages}
+        reviewerName={reviewerName}
         signers={signers}
       />
     ) : active === "SPTJM" ? (
       <SptjmPage
+        canReview
         docUploads={docUploads}
         mode="admin"
         onChangeDocUploads={setDocUploads}
+        reviewerName={reviewerName}
         signers={signers}
         templates={sptjmTemplates}
       />
-    ) : active === "Bukti Penerimaan" ? (
-      <ReceiptPage />
+    ) : active === "Pelaporan/LPJ" ? (
+      <PelaporanLpjPage
+        docUploads={docUploads}
+        mode="admin"
+        onChangeDocUploads={setDocUploads}
+      />
     ) : active === "PKS" ? (
       <PksPage
+        canReview
         docUploads={docUploads}
         onChangeDocUploads={setDocUploads}
+        reviewerName={reviewerName}
         signers={signers}
       />
     ) : (
@@ -8322,9 +10312,12 @@ export default function App() {
       />
       <div className="min-h-screen lg:pl-72">
         <Header
-          title={active}
-          onMenu={() => setSidebarOpen(true)}
+          logoutLabel={`Keluar dari portal ${reviewerRole.toLowerCase()}`}
           onLogout={() => setAppMode("login")}
+          onMenu={() => setSidebarOpen(true)}
+          title={active}
+          userName={reviewerName}
+          userRole={reviewerRole}
         />
         <main className="p-5 md:p-8">{content}</main>
       </div>

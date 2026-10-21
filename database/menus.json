@@ -1,0 +1,96 @@
+{
+  "Schoolkit": [
+    {
+      "id": 1,
+      "name": "Tas sekolah",
+      "specification": "Bahan tahan air, ukuran siswa SMP",
+      "volume": 100,
+      "price": 185000
+    },
+    {
+      "id": 2,
+      "name": "Paket alat tulis",
+      "specification": "Buku tulis, pensil, pulpen, penghapus, dan penggaris",
+      "volume": 100,
+      "price": 125000
+    },
+    {
+      "id": 3,
+      "name": "Seragam sekolah",
+      "specification": "Satu set seragam SMP sesuai ukuran siswa",
+      "volume": 100,
+      "price": 275000
+    }
+  ],
+  "Alat IPA": [
+    {
+      "id": 1,
+      "name": "Kit praktikum IPA",
+      "specification": "Set percobaan fisika dan biologi SMP",
+      "volume": 8,
+      "price": 4500000
+    },
+    {
+      "id": 2,
+      "name": "Mikroskop siswa",
+      "specification": "Pembesaran 40x-400x, lengkap dengan kaca preparat",
+      "volume": 6,
+      "price": 1850000
+    }
+  ],
+  "RKD": [
+    {
+      "id": 1,
+      "name": "Rehab ruang kelas rusak",
+      "specification": "Perbaikan dinding, lantai, dan atap ruang kelas SMP",
+      "volume": 2,
+      "price": 45000000
+    },
+    {
+      "id": 2,
+      "name": "Pengecatan dan finishing",
+      "specification": "Cat tembok, plafon, dan kusen",
+      "volume": 2,
+      "price": 8500000
+    }
+  ],
+  "Lab Komputer": [
+    {
+      "id": 1,
+      "name": "Komputer siswa",
+      "specification": "PC desktop, RAM 8 GB, SSD 256 GB",
+      "volume": 20,
+      "price": 7800000
+    },
+    {
+      "id": 2,
+      "name": "Meja dan kursi lab",
+      "specification": "Meja komputer siswa SMP beserta kursi",
+      "volume": 20,
+      "price": 1250000
+    }
+  ],
+  "Meubeler": [
+    {
+      "id": 1,
+      "name": "Meja siswa",
+      "specification": "Kayu kuat, ukuran standar SMP",
+      "volume": 40,
+      "price": 650000
+    },
+    {
+      "id": 2,
+      "name": "Kursi siswa",
+      "specification": "Rangka besi, dudukan kayu",
+      "volume": 40,
+      "price": 425000
+    },
+    {
+      "id": 3,
+      "name": "Lemari kelas",
+      "specification": "Lemari kayu 2 pintu untuk ruang kelas",
+      "volume": 6,
+      "price": 2750000
+    }
+  ]
+}

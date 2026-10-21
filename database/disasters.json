@@ -1,0 +1,50 @@
+[
+  {
+    "code": "GPN",
+    "name": "Gempa Bumi",
+    "category": "Geologi",
+    "status": "Aktif"
+  },
+  {
+    "code": "BJR",
+    "name": "Banjir",
+    "category": "Hidrometeorologi",
+    "status": "Aktif"
+  },
+  {
+    "code": "ERU",
+    "name": "Erupsi",
+    "category": "Geologi",
+    "status": "Aktif"
+  },
+  {
+    "code": "LGS",
+    "name": "Tanah Longsor",
+    "category": "Geologi",
+    "status": "Aktif"
+  },
+  {
+    "code": "TSN",
+    "name": "Tsunami",
+    "category": "Geologi",
+    "status": "Aktif"
+  },
+  {
+    "code": "KBR",
+    "name": "Kebakaran",
+    "category": "Non alam",
+    "status": "Aktif"
+  },
+  {
+    "code": "PTN",
+    "name": "Puting Beliung",
+    "category": "Hidrometeorologi",
+    "status": "Aktif"
+  },
+  {
+    "code": "KRG",
+    "name": "Kekeringan",
+    "category": "Hidrometeorologi",
+    "status": "Nonaktif"
+  }
+]

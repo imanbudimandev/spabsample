@@ -1,5 +1,11 @@
 {
-  "title": "SPAB - Satuan Pendidikan Aman Bencana",
-  "description": "Sistem Informasi & Manajemen Satuan Pendidikan Aman Bencana",
-  "language": "id"
+  "title": "SPAB",
+  "description": "Manages disaster-affected schools with data tracking, aid packages, financial records, and receipt uploads to streamline relief efforts efficiently.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
 }

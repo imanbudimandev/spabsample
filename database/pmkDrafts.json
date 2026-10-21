@@ -1,0 +1,30 @@
+{
+  "SMP Negeri 1 Cianjur": {
+    "aidName": "Schoolkit dan Meubeler",
+    "skNumber": "",
+    "pksNumber": "SPAB/PKS/0175/V/2025",
+    "nominal": "118.000.000",
+    "aidKind": "uang",
+    "received": "",
+    "used": "",
+    "unused": "",
+    "usage": "",
+    "signPlace": "Kab. Cianjur",
+    "signDate": "",
+    "updatedAt": "13/10/2026, 13.01.47"
+  },
+  "SMP Negeri 1 Sukamaju": {
+    "aidName": "Schoolkit dan Lab Komputer",
+    "skNumber": "",
+    "pksNumber": "SPAB/PKS/0182/V/2025",
+    "nominal": "239.500.000",
+    "aidKind": "uang",
+    "received": "",
+    "used": "",
+    "unused": "",
+    "usage": "",
+    "signPlace": "Kab. Cianjur",
+    "signDate": "",
+    "updatedAt": "13/10/2026, 16.03.45"
+  }
+}

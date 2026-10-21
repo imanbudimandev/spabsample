@@ -1,0 +1,62 @@
+{
+  "SMP Negeri 1 Sukamaju": {
+    "rab": {
+      "Schoolkit": {
+        "name": "rab-schoolkit-smp-negeri-1-sukamaju.pdf",
+        "size": 968,
+        "uploadedAt": "13/10/2026, 07.51.43",
+        "approvalStatus": "disetujui",
+        "reviewNote": "",
+        "reviewedBy": "User Dinas",
+        "reviewedAt": "13/10/2026, 07.52.12"
+      },
+      "Meubeler": {
+        "name": "rab-meubeler-smp-negeri-1-sukamaju.pdf",
+        "size": 953,
+        "uploadedAt": "13/10/2026, 09.27.11",
+        "approvalStatus": "disetujui",
+        "reviewNote": "",
+        "reviewedBy": "User Dinas",
+        "reviewedAt": "13/10/2026, 09.27.31"
+      },
+      "Lab Komputer": {
+        "name": "rab-lab-komputer-smp-negeri-1-sukamaju.pdf",
+        "size": 910,
+        "uploadedAt": "13/10/2026, 15.53.27",
+        "approvalStatus": "disetujui",
+        "reviewNote": "",
+        "reviewedBy": "User Direktorat",
+        "reviewedAt": "13/10/2026, 15.54.29"
+      }
+    },
+    "pakta": {
+      "name": "pakta-integritas-smp-negeri-1-sukamaju.pdf",
+      "size": 1093,
+      "uploadedAt": "13/10/2026, 15.55.59",
+      "approvalStatus": "disetujui",
+      "reviewNote": "",
+      "reviewedBy": "User Dinas",
+      "reviewedAt": "13/10/2026, 15.56.33"
+    },
+    "kwitansi": {
+      "schoolkit": {
+        "name": "kwitansi-smp-negeri-1-sukamaju.pdf",
+        "size": 1062,
+        "uploadedAt": "13/10/2026, 09.30.32",
+        "approvalStatus": "menunggu persetujuan",
+        "reviewNote": "",
+        "reviewedBy": "",
+        "reviewedAt": ""
+      }
+    },
+    "sptjm": null,
+    "pks": null,
+    "pelaporan": {
+      "rkas": null,
+      "invoice": null,
+      "bast": null,
+      "pmk": null,
+      "dokumentasi": []
+    }
+  }
+}

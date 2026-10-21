@@ -1,0 +1,20 @@
+{
+  "SMP Negeri 1 Sukamaju::schoolkit": {
+    "receivedFrom": "Kuasa Pengguna Anggaran Satuan Kerja Direktorat Sekolah Menengah Pertama",
+    "amount": 58500000,
+    "paymentFor": "Untuk Pembayaran Bantuan Pemerintah Schoolkit Satuan Pendidikan Sekolah Menengah Pertama (SMP) Tahun 2026",
+    "year": "2026",
+    "principal": "Hendra Gunawan, S.Pd.",
+    "principalNip": "19780512 200501 1 008",
+    "updatedAt": "13/10/2026, 09.28.37"
+  },
+  "SMP Negeri 1 Sukamaju::non-schoolkit": {
+    "receivedFrom": "Kuasa Pengguna Anggaran Satuan Kerja Direktorat Sekolah Menengah Pertama",
+    "amount": 181000000,
+    "paymentFor": "Untuk Pembayaran Bantuan Pemerintah Lab Komputer Satuan Pendidikan Sekolah Menengah Pertama (SMP) Tahun 2026",
+    "year": "2026",
+    "principal": "Hendra Gunawan, S.Pd.",
+    "principalNip": "19780512 200501 1 008",
+    "updatedAt": "13/10/2026, 15.58.29"
+  }
+}

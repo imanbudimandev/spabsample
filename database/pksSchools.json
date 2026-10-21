@@ -1,0 +1,66 @@
+[
+  {
+    "name": "SMP Negeri 1 Sukamaju",
+    "npsn": "20204182",
+    "address": "Jl. Raya Sukamaju No. 12, Cianjur, Jawa Barat",
+    "principal": "Hendra Gunawan, S.Pd.",
+    "number": "SPAB/PKS/0182/V/2025",
+    "amount": "Rp185.000.000"
+  },
+  {
+    "name": "SMP Negeri 4 Demak",
+    "npsn": "20319374",
+    "address": "Jl. Sultan Fatah No. 58, Demak, Jawa Tengah",
+    "principal": "Sri Wahyuni, M.Pd.",
+    "number": "SPAB/PKS/0181/V/2025",
+    "amount": "Rp120.000.000"
+  },
+  {
+    "name": "SMP Negeri 2 Sumberwuluh",
+    "npsn": "20520914",
+    "address": "Desa Sumberwuluh, Candipuro, Lumajang, Jawa Timur",
+    "principal": "Ahmad Fauzi, S.Pd.",
+    "number": "SPAB/PKS/0180/V/2025",
+    "amount": "Rp210.000.000"
+  },
+  {
+    "name": "SMP Negeri 1 Tanjung",
+    "npsn": "50200317",
+    "address": "Jl. Pendidikan No. 4, Tanjung, Lombok Utara, NTB",
+    "principal": "Muhammad Ridwan, M.Pd.",
+    "number": "SPAB/PKS/0179/V/2025",
+    "amount": "Rp95.000.000"
+  },
+  {
+    "name": "SMP Negeri 3 Garut",
+    "npsn": "20211845",
+    "address": "Jl. Ahmad Yani No. 21, Garut, Jawa Barat",
+    "principal": "Rina Marlina, M.Pd.",
+    "number": "SPAB/PKS/0178/V/2025",
+    "amount": "Rp165.000.000"
+  },
+  {
+    "name": "SMP Negeri 2 Palu",
+    "npsn": "40201288",
+    "address": "Jl. Gatot Subroto No. 9, Palu, Sulawesi Tengah",
+    "principal": "Andi Rahman, S.Pd.",
+    "number": "SPAB/PKS/0177/V/2025",
+    "amount": "Rp198.000.000"
+  },
+  {
+    "name": "SMP Negeri 5 Padang",
+    "npsn": "10307821",
+    "address": "Jl. Sudirman No. 45, Padang, Sumatera Barat",
+    "principal": "Fitriani, M.Pd.",
+    "number": "SPAB/PKS/0176/V/2025",
+    "amount": "Rp142.000.000"
+  },
+  {
+    "name": "SMP Negeri 1 Cianjur",
+    "npsn": "20203119",
+    "address": "Jl. Dr. Muwardi No. 7, Cianjur, Jawa Barat",
+    "principal": "Dedi Kurniawan, S.Pd.",
+    "number": "SPAB/PKS/0175/V/2025",
+    "amount": "Rp110.000.000"
+  }
+]

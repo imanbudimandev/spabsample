@@ -1,0 +1,86 @@
+[
+  {
+    "code": "BRG-001",
+    "name": "Tas sekolah",
+    "unit": "Buah",
+    "category": "Schoolkit",
+    "price": 185000
+  },
+  {
+    "code": "BRG-002",
+    "name": "Paket alat tulis",
+    "unit": "Paket",
+    "category": "Schoolkit",
+    "price": 125000
+  },
+  {
+    "code": "BRG-003",
+    "name": "Seragam sekolah",
+    "unit": "Set",
+    "category": "Schoolkit",
+    "price": 275000
+  },
+  {
+    "code": "BRG-004",
+    "name": "Kit praktikum IPA",
+    "unit": "Set",
+    "category": "Alat IPA",
+    "price": 4500000
+  },
+  {
+    "code": "BRG-005",
+    "name": "Mikroskop siswa",
+    "unit": "Unit",
+    "category": "Alat IPA",
+    "price": 1850000
+  },
+  {
+    "code": "BRG-006",
+    "name": "Rehab ruang kelas rusak",
+    "unit": "Ruang",
+    "category": "RKD",
+    "price": 45000000
+  },
+  {
+    "code": "BRG-007",
+    "name": "Pengecatan dan finishing",
+    "unit": "Ruang",
+    "category": "RKD",
+    "price": 8500000
+  },
+  {
+    "code": "BRG-008",
+    "name": "Komputer siswa",
+    "unit": "Unit",
+    "category": "Lab Komputer",
+    "price": 7800000
+  },
+  {
+    "code": "BRG-009",
+    "name": "Meja dan kursi lab",
+    "unit": "Set",
+    "category": "Lab Komputer",
+    "price": 1250000
+  },
+  {
+    "code": "BRG-010",
+    "name": "Meja siswa",
+    "unit": "Unit",
+    "category": "Meubeler",
+    "price": 650000
+  },
+  {
+    "code": "BRG-011",
+    "name": "Kursi siswa",
+    "unit": "Unit",
+    "category": "Meubeler",
+    "price": 425000
+  },
+  {
+    "code": "BRG-012",
+    "name": "Lemari kelas",
+    "unit": "Unit",
+    "category": "Meubeler",
+    "price": 2750000
+  }
+]
